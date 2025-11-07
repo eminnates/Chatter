@@ -1,0 +1,104 @@
+# Visual Studio / .NET .gitignore
+# From: https://github.com/github/gitignore (VisualStudio + dotnet)
+# Ignore build outputs
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio temporary files, build results, and
+# user-specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+
+# MSTest test results
+TestResults/
+*.trx
+
+# Build results of an ATL Project
+[Dd]ebugPS/
+[Rr]eleasePS/
+
+# ROSLYN / TypeScript cache
+*.cache
+*.rps
+
+# Rider
+.idea/
+*.sln.iml
+
+# Rider/Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# Visual Studio Code
+.vscode/
+
+# User-specific files
+*.pidb
+*.userprefs
+
+# Mono
+*.userprefs
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Entity Framework
+Migrations/Generated
+
+# EF and database files
+*.mdf
+*.ldf
+
+# Dotnet publish folder
+publish/
+
+# Logs
+*.log
+
+# coverage
+coverage.opencover.xml
+coverage/*.json
+
+# Project lock / assets
+project.lock.json
+project.assets.json
+
+# Local configuration files (may contain secrets)
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# JetBrains Rider caches
+.idea/
+
+# Ignore compiled DLLs and other common binary artifacts
+*.dll
+*.exe
+*.so
+*.dylib
+
+# npm / yarn
+node_modules/
+
+# Optional: uncomment to ignore all appsettings json files
+# appsettings*.json
+
+# End of .gitignore
