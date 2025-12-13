@@ -1,12 +1,13 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
 namespace Chatter.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialCreatePostgreSQL : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,10 +16,10 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetRoles",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -29,29 +30,29 @@ namespace Chatter.Infrastructure.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    FullName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    Bio = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    ProfilePictureUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    IsOnline = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    LastSeenAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    NormalizedEmail = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    EmailConfirmed = table.Column<bool>(type: "bit", nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    SecurityStamp = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(type: "bit", nullable: false),
-                    TwoFactorEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    LockoutEnd = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    LockoutEnabled = table.Column<bool>(type: "bit", nullable: false),
-                    AccessFailedCount = table.Column<int>(type: "int", nullable: false)
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    FullName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Bio = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    ProfilePictureUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    IsOnline = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    LastSeenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    EmailConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    PasswordHash = table.Column<string>(type: "text", nullable: true),
+                    SecurityStamp = table.Column<string>(type: "text", nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "text", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "text", nullable: true),
+                    PhoneNumberConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    LockoutEnd = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LockoutEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    AccessFailedCount = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -62,11 +63,11 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetRoleClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    RoleId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ClaimType = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ClaimValue = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    RoleId = table.Column<string>(type: "text", nullable: false),
+                    ClaimType = table.Column<string>(type: "text", nullable: true),
+                    ClaimValue = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -83,11 +84,11 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetUserClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ClaimType = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ClaimValue = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ClaimType = table.Column<string>(type: "text", nullable: true),
+                    ClaimValue = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -104,10 +105,10 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetUserLogins",
                 columns: table => new
                 {
-                    LoginProvider = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ProviderKey = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ProviderDisplayName = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                    LoginProvider = table.Column<string>(type: "text", nullable: false),
+                    ProviderKey = table.Column<string>(type: "text", nullable: false),
+                    ProviderDisplayName = table.Column<string>(type: "text", nullable: true),
+                    UserId = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -124,8 +125,8 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    RoleId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    RoleId = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -148,10 +149,10 @@ namespace Chatter.Infrastructure.Migrations
                 name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    LoginProvider = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Value = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    LoginProvider = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Value = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -168,20 +169,20 @@ namespace Chatter.Infrastructure.Migrations
                 name: "RefreshTokens",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Token = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    JwtId = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    IsUsed = table.Column<bool>(type: "bit", nullable: false),
-                    IsRevoked = table.Column<bool>(type: "bit", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    RevokedByIp = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    RevokedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedByIp = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    ReplacedByToken = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Token = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    JwtId = table.Column<string>(type: "text", nullable: false),
+                    IsUsed = table.Column<bool>(type: "boolean", nullable: false),
+                    IsRevoked = table.Column<bool>(type: "boolean", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    RevokedByIp = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    RevokedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedByIp = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    ReplacedByToken = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -198,17 +199,17 @@ namespace Chatter.Infrastructure.Migrations
                 name: "UserConnections",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ConnectionId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    UserAgent = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    IpAddress = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    ConnectedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    DisconnectedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ConnectionId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    UserAgent = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    IpAddress = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    ConnectedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DisconnectedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -225,19 +226,19 @@ namespace Chatter.Infrastructure.Migrations
                 name: "ConversationParticipants",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    ConversationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Role = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    JoinedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    LeftAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    IsMuted = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    LastReadAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UnreadCount = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ConversationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Role = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    JoinedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LeftAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    IsMuted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    LastReadAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    UnreadCount = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -254,16 +255,16 @@ namespace Chatter.Infrastructure.Migrations
                 name: "Conversations",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    Type = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    GroupImageUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    CreatedByUserId = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    LastMessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    CreatedById = table.Column<string>(type: "nvarchar(450)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    GroupImageUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CreatedByUserId = table.Column<string>(type: "text", nullable: true),
+                    LastMessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    CreatedById = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -279,22 +280,22 @@ namespace Chatter.Infrastructure.Migrations
                 name: "Messages",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    ConversationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    SenderId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Content = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: false),
-                    Type = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    Status = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    SentAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    DeliveredAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    ReadAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    EditedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    ReplyToMessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    MessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ConversationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SenderId = table.Column<string>(type: "text", nullable: false),
+                    Content = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: false),
+                    Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    SentAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DeliveredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ReadAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EditedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ReplyToMessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    MessageId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -328,20 +329,20 @@ namespace Chatter.Infrastructure.Migrations
                 name: "MessageAttachments",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
-                    FileUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    Type = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    MessageId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FileName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    FileUrl = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
+                    Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     FileSize = table.Column<long>(type: "bigint", nullable: false),
-                    MimeType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    ThumbnailUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    Width = table.Column<int>(type: "int", nullable: true),
-                    Height = table.Column<int>(type: "int", nullable: true),
-                    Duration = table.Column<int>(type: "int", nullable: true),
-                    UploadedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    MimeType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    ThumbnailUrl = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Width = table.Column<int>(type: "integer", nullable: true),
+                    Height = table.Column<int>(type: "integer", nullable: true),
+                    Duration = table.Column<int>(type: "integer", nullable: true),
+                    UploadedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -358,13 +359,13 @@ namespace Chatter.Infrastructure.Migrations
                 name: "MessageReactions",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    MessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Emoji = table.Column<string>(type: "nvarchar(10)", maxLength: 10, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    MessageId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    Emoji = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -392,8 +393,7 @@ namespace Chatter.Infrastructure.Migrations
                 name: "RoleNameIndex",
                 table: "AspNetRoles",
                 column: "NormalizedName",
-                unique: true,
-                filter: "[NormalizedName] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserClaims_UserId",
@@ -573,8 +573,7 @@ namespace Chatter.Infrastructure.Migrations
                 name: "IX_Users_Email",
                 table: "Users",
                 column: "Email",
-                unique: true,
-                filter: "[Email] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_IsOnline",
@@ -590,15 +589,13 @@ namespace Chatter.Infrastructure.Migrations
                 name: "IX_Users_UserName",
                 table: "Users",
                 column: "UserName",
-                unique: true,
-                filter: "[UserName] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
                 table: "Users",
                 column: "NormalizedUserName",
-                unique: true,
-                filter: "[NormalizedUserName] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ConversationParticipants_Conversations_ConversationId",
