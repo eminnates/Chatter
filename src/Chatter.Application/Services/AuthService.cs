@@ -39,76 +39,154 @@ namespace Chatter.Application.Services
 
         public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
         {
-            // 1. Email zaten kayıtlı mı kontrol et
-            var existingUser = await _userRepository.GetByEmailAsync(request.Email);
-            if (existingUser != null)
+            // Transaction başlat
+            await _unitOfWork.BeginTransactionAsync();
+
+            try
             {
-                throw new InvalidOperationException("Bu email adresi zaten kullanılıyor.");
+                // 1. Email zaten kayıtlı mı kontrol et
+                var existingUser = await _userRepository.GetByEmailAsync(request.Email);
+                if (existingUser != null)
+                {
+                    throw new InvalidOperationException("Bu email adresi zaten kullanılıyor.");
+                }
+
+                // 2. Username zaten kayıtlı mı kontrol et
+                var existingUsername = await _userRepository.GetByUsernameAsync(request.UserName);
+                if (existingUsername != null)
+                {
+                    throw new InvalidOperationException("Bu kullanıcı adı zaten kullanılıyor.");
+                }
+
+                // 3. Yeni kullanıcı oluştur
+                var user = new AppUser
+                {
+                    UserName = request.UserName,
+                    Email = request.Email,
+                    FullName = request.FullName ?? request.UserName,
+                    EmailConfirmed = false,
+                    IsActive = true,
+                    IsOnline = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                // 4. Identity ile kullanıcıyı kaydet
+                var result = await _userManager.CreateAsync(user, request.Password);
+                
+                if (!result.Succeeded)
+                {
+                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    throw new InvalidOperationException($"Kullanıcı oluşturulamadı: {errors}");
+                }
+
+                // 5. Varsayılan rol ata
+                await _userManager.AddToRoleAsync(user, "User");
+
+                // 6. JWT Token üret
+                var token = await GenerateJwtToken(user);
+
+                // 7. Refresh Token oluştur ve kaydet
+                var refreshToken = GenerateRefreshToken();
+                var refreshTokenEntity = new RefreshToken
+                {
+                    Token = refreshToken,
+                    UserId = user.Id,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false,
+                    IsRevoked = false
+                };
+
+                await _refreshTokenRepository.AddAsync(refreshTokenEntity);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Her şey başarılıysa commit et
+                await _unitOfWork.CommitTransactionAsync();
+
+                // 8. Response döndür
+                return new RegisterResponse
+                {
+                    UserId = user.Id,
+                    UserName = user.UserName,
+                    Email = user.Email,
+                    FullName = user.FullName,
+                    Token = token
+                };
             }
-
-            // 2. Username zaten kayıtlı mı kontrol et
-            var existingUsername = await _userRepository.GetByUsernameAsync(request.UserName);
-            if (existingUsername != null)
+            catch
             {
-                throw new InvalidOperationException("Bu kullanıcı adı zaten kullanılıyor.");
+                // Hata durumunda rollback yap
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
             }
-
-            // 3. Yeni kullanıcı oluştur
-            var user = new AppUser
-            {
-                UserName = request.UserName,
-                Email = request.Email,
-                FullName = request.FullName ?? request.UserName,
-                EmailConfirmed = false, // Email doğrulama ekleyebilirsin
-                IsActive = true,
-                IsOnline = false,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // 4. Identity ile kullanıcıyı kaydet
-            var result = await _userManager.CreateAsync(user, request.Password);
-            
-            if (!result.Succeeded)
-            {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                throw new InvalidOperationException($"Kullanıcı oluşturulamadı: {errors}");
-            }
-
-            // 5. Varsayılan rol ata (isteğe bağlı)
-            await _userManager.AddToRoleAsync(user, "User");
-
-            // 6. JWT Token üret
-            var token = await GenerateJwtToken(user);
-
-            // 7. Refresh Token oluştur ve kaydet
-            var refreshToken = GenerateRefreshToken();
-            var refreshTokenEntity = new RefreshToken
-            {
-                Token = refreshToken,
-                UserId = user.Id,
-                ExpiresAt = DateTime.UtcNow.AddDays(7),
-                CreatedAt = DateTime.UtcNow,
-                IsUsed = false,
-                IsRevoked = false
-            };
-
-            await _refreshTokenRepository.AddAsync(refreshTokenEntity);
-            await _unitOfWork.SaveChangesAsync();
-
-            // 8. Response döndür
-            return new RegisterResponse
-            {
-                UserId = user.Id,
-                UserName = user.UserName,
-                Email = user.Email,
-                FullName = user.FullName,
-                Token = token
-            };
         }
 
-        public Task<LoginResponse> LoginAsync(LoginRequest request)
+        public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            throw new NotImplementedException();
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                // 1. Kullanıcıyı bul (Email veya Username ile)
+                var user = await _userRepository.GetByEmailAsync(request.EmailOrUserName) 
+                           ?? await _userRepository.GetByUsernameAsync(request.EmailOrUserName);
+
+                if (user == null)
+                {
+                    // Güvenlik nedeniyle detay vermiyoruz
+                    throw new InvalidOperationException("Kullanıcı adı veya şifre hatalı.");
+                }
+
+                // 2. Şifreyi kontrol et
+                var isPasswordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+                if (!isPasswordValid)
+                {
+                    throw new InvalidOperationException("Kullanıcı adı veya şifre hatalı.");
+                }
+
+                // 3. Kullanıcı aktif mi kontrol et
+                if (!user.IsActive)
+                {
+                    throw new InvalidOperationException("Hesabınız pasif durumdadır. Lütfen yönetici ile iletişime geçin.");
+                }
+
+                // 4. JWT Token üret
+                var token = await GenerateJwtToken(user);
+
+                // 5. Refresh Token üret ve kaydet
+                var refreshToken = GenerateRefreshToken();
+                var refreshTokenEntity = new RefreshToken
+                {
+                    Token = refreshToken,
+                    UserId = user.Id,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false,
+                    IsRevoked = false
+                };
+
+                await _refreshTokenRepository.AddAsync(refreshTokenEntity);
+                
+                // 6. Kullanıcıyı online yap
+                user.SetOnlineStatus(true);
+                
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
+                // 7. Response döndür
+                return new LoginResponse
+                {
+                    UserId = user.Id,
+                    UserName = user.UserName!,
+                    Email = user.Email!,
+                    Token = token,
+                    RefreshToken = refreshToken
+                };
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
 
         public Task<ChangePasswordResponse> ChangePasswordAsync(ChangePasswordRequest request, Guid userId)
