@@ -1,5 +1,6 @@
 using Chatter.Application;
 using Chatter.Infrastructure;
+using Chatter.API.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -9,8 +10,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder => builder
+            .SetIsOriginAllowed((host) => true)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
+});
 
 // Add Application Layer (Services)
 builder.Services.AddApplication();
@@ -37,6 +49,20 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!))
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/chat"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -70,9 +96,12 @@ else
     app.UseHttpsRedirection();
 }
 
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
