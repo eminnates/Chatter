@@ -18,6 +18,14 @@ public class ChatController : ControllerBase
         _chatService = chatService;
     }
 
+    [HttpPost("conversation/{targetUserId}")]
+    public async Task<IActionResult> GetOrCreateConversation(string targetUserId)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var conversationId = await _chatService.CreatePrivateConversationAsync(userId!, targetUserId);
+        return Ok(new { success = true, data = new { conversationId } });
+    }
+
     [HttpGet("conversations")]
     public async Task<IActionResult> GetConversations()
     {

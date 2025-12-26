@@ -126,9 +126,8 @@ namespace Chatter.Application.Services
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                // 1. Kullanıcıyı bul (Email veya Username ile)
-                var user = await _userRepository.GetByEmailAsync(request.EmailOrUserName) 
-                           ?? await _userRepository.GetByUsernameAsync(request.EmailOrUserName);
+                // 1. Kullanıcıyı bul (Email ile)
+                var user = await _userRepository.GetByEmailAsync(request.Email);
 
                 if (user == null)
                 {
