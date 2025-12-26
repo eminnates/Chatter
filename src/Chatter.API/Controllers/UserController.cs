@@ -1,6 +1,7 @@
 using Chatter.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Chatter.API.Controllers;
 
@@ -19,7 +20,8 @@ public class UserController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAllUsers()
     {
-        var users = await _userService.GetAllUsersAsync();
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var users = await _userService.GetAllUsersAsync(currentUserId);
         return Ok(new { success = true, data = users });
     }
 

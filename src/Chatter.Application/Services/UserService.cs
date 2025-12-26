@@ -26,9 +26,16 @@ public class UserService : IUserService
         });
     }
 
-    public async Task<IEnumerable<UserDto>> GetAllUsersAsync()
+    public async Task<IEnumerable<UserDto>> GetAllUsersAsync(string? currentUserId = null)
     {
         var users = await _unitOfWork.Users.GetAllAsync();
+        
+        // Exclude current user from list
+        if (!string.IsNullOrEmpty(currentUserId))
+        {
+            users = users.Where(u => u.Id != currentUserId).ToList();
+        }
+        
         return users.Select(u => new UserDto
         {
             Id = u.Id,

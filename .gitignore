@@ -102,3 +102,9 @@ node_modules/
 # appsettings*.json
 
 # End of .gitignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production.local

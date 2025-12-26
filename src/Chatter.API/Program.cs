@@ -1,28 +1,61 @@
 using Chatter.Application;
 using Chatter.Infrastructure;
 using Chatter.API.Hubs;
+using Chatter.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using DotNetEnv;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers();
+// Add detailed logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+
+// Load environment variables from .env file if it exists
+if (File.Exists(".env"))
+{
+    DotNetEnv.Env.Load();
+}
+
+// Override configuration with environment variables
+builder.Configuration.AddEnvironmentVariables();
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configure CORS - Only allow Electron app and specified origins
+var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
+var corsOrigins = corsOriginsEnv?.Split(",") ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
+    options.AddPolicy("AllowSpecificOrigins",
         builder => builder
-            .SetIsOriginAllowed((host) => true)
+            .WithOrigins(corsOrigins)
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
 });
+
+// Build connection string from environment variables
+var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "chatterdb";
+var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "chatter";
+var dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "chatter123";
+var connectionString = $"Host={dbHost};Database={dbName};Username={dbUser};Password={dbPassword}";
+
+// Update configuration with the built connection string
+builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // Add Application Layer (Services)
 builder.Services.AddApplication();
@@ -30,8 +63,23 @@ builder.Services.AddApplication();
 // Add Infrastructure (DbContext, Identity, Repositories, UnitOfWork)
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+// JWT - Read from environment
+var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") 
+    ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLongChangeInProduction!";
+Console.WriteLine($"JWT_SECRET_KEY: {secretKey}");
+var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "ChatterAPI";
+var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "ChatterClient";
+
+// Add authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("Admin"));
+    
+    options.AddPolicy("ModeratorOrAdmin", policy =>
+        policy.RequireRole("Admin", "Moderator"));
+});
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -45,10 +93,10 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
+        ValidIssuer = issuer,
+        ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!))
+            Encoding.UTF8.GetBytes(secretKey))
     };
 
     options.Events = new JwtBearerEvents
@@ -96,7 +144,14 @@ else
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
+
+// Add global exception handler middleware
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
+// Add request logging middleware
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+app.UseCors("AllowSpecificOrigins");
 
 app.UseAuthentication();
 app.UseAuthorization();

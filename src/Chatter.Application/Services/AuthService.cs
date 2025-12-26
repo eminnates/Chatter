@@ -208,8 +208,10 @@ namespace Chatter.Application.Services
         private async Task<string> GenerateJwtToken(AppUser user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
-            var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey bulunamadı.");
-            
+            var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+                ?? jwtSettings["SecretKey"]
+                ?? throw new InvalidOperationException("JWT SecretKey bulunamadı.");
+
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
