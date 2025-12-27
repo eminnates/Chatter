@@ -1,5 +1,6 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Net;
+using System.Text.Json;
+using Chatter.Domain.Common.Exceptions; // Senin Common klasöründeki exceptionlar
 
 namespace Chatter.API.Middleware;
 
@@ -31,47 +32,61 @@ public class GlobalExceptionHandlerMiddleware
     {
         context.Response.ContentType = "application/json";
 
-        var response = new ProblemDetails
-        {
-            Title = "An error occurred",
-            Status = StatusCodes.Status500InternalServerError,
-        };
+        int statusCode;
+        string errorCode;
+        string message;
 
         switch (exception)
         {
+            // 1. Validasyon Hataları (Common/Exceptions/ValidationException.cs)
+            case ValidationException validationEx:
+                statusCode = StatusCodes.Status400BadRequest;
+                errorCode = "Validation.Error";
+                message = validationEx.Message;
+                break;
+
+            // 2. Bulunamadı Hataları (Common/Exceptions/NotFoundException.cs)
+            case NotFoundException notFoundEx:
+                statusCode = StatusCodes.Status404NotFound;
+                errorCode = "Resource.NotFound";
+                message = notFoundEx.Message;
+                break;
+
+            // 3. Genel Domain Hataları (Common/Exceptions/DomainException.cs)
+            case DomainException domainEx:
+                statusCode = StatusCodes.Status400BadRequest;
+                errorCode = "Domain.RuleViolation";
+                message = domainEx.Message;
+                break;
+
+            // 4. Yetki Hataları (.NET Standard)
             case UnauthorizedAccessException:
-                response.Status = StatusCodes.Status401Unauthorized;
-                response.Title = "Unauthorized";
-                response.Detail = "You do not have permission to access this resource.";
+                statusCode = StatusCodes.Status401Unauthorized;
+                errorCode = "Auth.Unauthorized";
+                message = "Bu işlemi yapmak için yetkiniz yok.";
                 break;
 
-            case InvalidOperationException:
-                response.Status = StatusCodes.Status400BadRequest;
-                response.Title = "Invalid Operation";
-                response.Detail = exception.Message;
-                break;
-
-            case ArgumentException:
-                response.Status = StatusCodes.Status400BadRequest;
-                response.Title = "Invalid Argument";
-                response.Detail = exception.Message;
-                break;
-
+            // 5. Beklenmeyen Sistem Hataları
             default:
-                response.Status = StatusCodes.Status500InternalServerError;
-                response.Title = "Internal Server Error";
-                response.Detail = "An unexpected error occurred. Please try again later.";
+                statusCode = StatusCodes.Status500InternalServerError;
+                errorCode = "Server.InternalError";
+                message = "Beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin.";
                 break;
         }
 
-        context.Response.StatusCode = response.Status ?? StatusCodes.Status500InternalServerError;
+        context.Response.StatusCode = statusCode;
 
-        return context.Response.WriteAsJsonAsync(new
+        // Result Pattern formatımıza uygun JSON yanıtı oluşturuyoruz
+        var response = new
         {
-            success = false,
-            message = response.Title,
-            detail = response.Detail,
-            statusCode = response.Status
-        });
+            error = new
+            {
+                code = errorCode,
+                message = message
+            }
+        };
+
+        var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        return context.Response.WriteAsync(JsonSerializer.Serialize(response, jsonOptions));
     }
 }

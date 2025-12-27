@@ -3,10 +3,12 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Interfaces
 {
-    public interface IGenericRepository<T> where T : class
+    public interface IGenericRepository<T, TKey> where T : class
     {
         // Query
-        Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default);
+        // object id yerine TKey id kullanıyoruz -> Tip güvenliği!
+        Task<T?> GetByIdAsync(TKey id, CancellationToken cancellationToken = default);
+        
         Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default);
         Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
         Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
@@ -27,6 +29,7 @@ namespace Chatter.Domain.Interfaces
         void Update(T entity);
         void UpdateRange(IEnumerable<T> entities);
         void Remove(T entity);
+        void RemoveById(TKey id); // ID ile silme kolaylığı
         void RemoveRange(IEnumerable<T> entities);
     }
 }

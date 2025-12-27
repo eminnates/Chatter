@@ -1,3 +1,4 @@
+using Chatter.Application.Common;
 using Chatter.Application.DTOs.Chat;
 using Chatter.Domain.Entities;
 using Chatter.Domain.Enums;
@@ -14,20 +15,23 @@ public class ChatService : IChatService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<MessageDto> SendMessageAsync(SendMessageRequest request, string senderId)
+    public async Task<Result<MessageDto>> SendMessageAsync(SendMessageRequest request, Guid senderId)
     {
         await _unitOfWork.BeginTransactionAsync();
         try
         {
             Conversation? conversation = null;
 
+            // 1. Konuşmayı Bul veya Oluştur
             if (request.ConversationId.HasValue)
             {
                 conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(request.ConversationId.Value);
             }
-            else if (!string.IsNullOrEmpty(request.ReceiverId))
+            // DÜZELTME: ReceiverId zaten Guid? ise string'e çevirip parse etmeye gerek yok. HasValue kontrolü yeterli.
+            else if (request.ReceiverId.HasValue)
             {
-                conversation = await _unitOfWork.Conversations.GetOneToOneConversationAsync(senderId, request.ReceiverId);
+                var receiverGuid = request.ReceiverId.Value;
+                conversation = await _unitOfWork.Conversations.GetOneToOneConversationAsync(senderId, receiverGuid);
                 
                 if (conversation == null)
                 {
@@ -43,19 +47,21 @@ public class ChatService : IChatService
                     var participants = new List<ConversationParticipant>
                     {
                         new() { ConversationId = conversation.Id, UserId = senderId, Role = ParticipantRole.Member },
-                        new() { ConversationId = conversation.Id, UserId = request.ReceiverId, Role = ParticipantRole.Member }
+                        new() { ConversationId = conversation.Id, UserId = receiverGuid, Role = ParticipantRole.Member }
                     };
                     
                     conversation.Participants = participants;
-
-                    // Save conversation first to generate ID and avoid circular dependency with Message
-                    await _unitOfWork.SaveChangesAsync();
+                    await _unitOfWork.SaveChangesAsync(); // ID oluşması için kaydet
                 }
             }
 
             if (conversation == null)
-                throw new InvalidOperationException("Konuşma bulunamadı veya oluşturulamadı.");
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                return Result<MessageDto>.Failure(new Error("Chat.ConversationError", "Konuşma bulunamadı veya alıcı bilgisi geçersiz."));
+            }
 
+            // 2. Mesajı Oluştur
             var message = new Message
             {
                 ConversationId = conversation.Id,
@@ -64,17 +70,18 @@ public class ChatService : IChatService
                 SentAt = DateTime.UtcNow,
                 Status = MessageStatus.Sent,
                 Type = MessageType.Text,
-                ReplyToMessageId = !string.IsNullOrEmpty(request.ReplyToMessageId) ? Guid.Parse(request.ReplyToMessageId) : null
+                // DÜZELTME: Doğrudan atama (Guid? -> Guid?)
+                ReplyToMessageId = request.ReplyToMessageId 
             };
 
             await _unitOfWork.Messages.AddAsync(message);
+            await _unitOfWork.SaveChangesAsync(); 
             
-            // Save message to generate ID
-            await _unitOfWork.SaveChangesAsync();
-            
+            // 3. Konuşma Bilgilerini Güncelle
             conversation.LastMessageId = message.Id;
             conversation.UpdatedAt = DateTime.UtcNow;
             
+            // Katılımcıların okunmamış sayısını artır
             foreach (var participant in conversation.Participants.Where(p => p.UserId != senderId))
             {
                 participant.UnreadCount++;
@@ -83,7 +90,8 @@ public class ChatService : IChatService
             await _unitOfWork.SaveChangesAsync();
             await _unitOfWork.CommitTransactionAsync();
 
-            return new MessageDto
+            // 4. DTO Döndür
+            var messageDto = new MessageDto
             {
                 Id = message.Id,
                 ConversationId = conversation.Id,
@@ -92,25 +100,29 @@ public class ChatService : IChatService
                 Content = message.Content,
                 SentAt = message.SentAt,
                 IsRead = false,
-                ReplyToMessageId = message.ReplyToMessageId?.ToString()
+                // DÜZELTME (HATA 1): .ToString() kaldırıldı. Guid? -> Guid?
+                ReplyToMessageId = message.ReplyToMessageId 
             };
+
+            return Result<MessageDto>.Success(messageDto);
         }
-        catch
+        catch (Exception ex)
         {
             await _unitOfWork.RollbackTransactionAsync();
-            throw;
+            return Result<MessageDto>.Failure(new Error("Chat.SendException", $"Mesaj gönderilemedi: {ex.Message}"));
         }
     }
 
-    public async Task<IEnumerable<MessageDto>> GetConversationMessagesAsync(Guid conversationId, int pageNumber, int pageSize, string userId)
+    public async Task<Result<IEnumerable<MessageDto>>> GetConversationMessagesAsync(Guid conversationId, int pageNumber, int pageSize, Guid userId)
     {
+        // Yetki Kontrolü
         var isParticipant = await _unitOfWork.Conversations.IsUserInConversationAsync(conversationId, userId);
         if (!isParticipant)
-            throw new UnauthorizedAccessException("Bu konuşmaya erişim yetkiniz yok.");
+            return Result<IEnumerable<MessageDto>>.Failure(new Error("Chat.AccessDenied", "Bu konuşmaya erişim yetkiniz yok."));
 
         var messages = await _unitOfWork.Messages.GetConversationMessagesAsync(conversationId, pageNumber, pageSize);
         
-        return messages.Select(m => new MessageDto
+        var dtos = messages.Select(m => new MessageDto
         {
             Id = m.Id,
             ConversationId = m.ConversationId,
@@ -119,15 +131,18 @@ public class ChatService : IChatService
             Content = m.Content,
             SentAt = m.SentAt,
             IsRead = m.Status == MessageStatus.Read,
-            ReplyToMessageId = m.ReplyToMessageId?.ToString()
+            // DÜZELTME (HATA 2): .ToString() kaldırıldı
+            ReplyToMessageId = m.ReplyToMessageId
         });
+
+        return Result<IEnumerable<MessageDto>>.Success(dtos);
     }
 
-    public async Task<IEnumerable<ConversationDto>> GetUserConversationsAsync(string userId)
+    public async Task<Result<IEnumerable<ConversationDto>>> GetUserConversationsAsync(Guid userId)
     {
         var conversations = await _unitOfWork.Conversations.GetUserConversationsAsync(userId);
         
-        return conversations.Select(c => {
+        var dtos = conversations.Select(c => {
             var otherParticipant = c.Type == ConversationType.OneToOne 
                 ? c.Participants.FirstOrDefault(p => p.UserId != userId)?.User 
                 : null;
@@ -148,7 +163,8 @@ public class ChatService : IChatService
                     Content = c.LastMessage.Content,
                     SentAt = c.LastMessage.SentAt,
                     IsRead = c.LastMessage.Status == MessageStatus.Read,
-                    ReplyToMessageId = c.LastMessage.ReplyToMessageId?.ToString()
+                    // DÜZELTME (HATA 3): .ToString() kaldırıldı
+                    ReplyToMessageId = c.LastMessage.ReplyToMessageId
                 } : null,
                 LastMessageTime = c.LastMessage?.SentAt ?? c.CreatedAt,
                 UnreadCount = myParticipant?.UnreadCount ?? 0,
@@ -157,14 +173,20 @@ public class ChatService : IChatService
                 Type = c.Type.ToString()
             };
         });
+
+        return Result<IEnumerable<ConversationDto>>.Success(dtos);
     }
 
-    public async Task MarkMessagesAsReadAsync(Guid conversationId, string userId)
+    public async Task<Result<bool>> MarkMessagesAsReadAsync(Guid conversationId, Guid userId)
     {
         await _unitOfWork.Messages.MarkMessagesAsReadAsync(conversationId, userId);
         
         var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(conversationId);
-        var participant = conversation?.Participants.FirstOrDefault(p => p.UserId == userId);
+        
+        if (conversation == null)
+             return Result<bool>.Failure(new Error("Chat.NotFound", "Konuşma bulunamadı."));
+
+        var participant = conversation.Participants.FirstOrDefault(p => p.UserId == userId);
         
         if (participant != null)
         {
@@ -172,12 +194,15 @@ public class ChatService : IChatService
             participant.LastReadAt = DateTime.UtcNow;
             await _unitOfWork.SaveChangesAsync();
         }
+
+        return Result<bool>.Success(true);
     }
 
-    public async Task<Guid> CreatePrivateConversationAsync(string senderId, string receiverId)
+    public async Task<Result<Guid>> CreatePrivateConversationAsync(Guid senderId, Guid receiverId)
     {
         var existing = await _unitOfWork.Conversations.GetOneToOneConversationAsync(senderId, receiverId);
-        if (existing != null) return existing.Id;
+        if (existing != null) 
+            return Result<Guid>.Success(existing.Id);
 
         var conversation = new Conversation
         {
@@ -194,6 +219,6 @@ public class ChatService : IChatService
         await _unitOfWork.Conversations.AddAsync(conversation);
         await _unitOfWork.SaveChangesAsync();
         
-        return conversation.Id;
+        return Result<Guid>.Success(conversation.Id);
     }
 }

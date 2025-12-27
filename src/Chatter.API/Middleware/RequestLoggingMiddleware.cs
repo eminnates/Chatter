@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
+using System.Diagnostics; // Stopwatch için gerekli
 
 namespace Chatter.API.Middleware;
 
@@ -17,14 +15,44 @@ public class RequestLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var method = context.Request.Method;
-        var path = context.Request.Path;
-        var ip = context.Connection.RemoteIpAddress?.ToString();
-        var userAgent = context.Request.Headers["User-Agent"].ToString();
-        var auth = context.User?.Identity?.IsAuthenticated == true ? context.User.Identity.Name : "Anonymous";
+        // 1. Süre tutmaya başla
+        var stopwatch = Stopwatch.StartNew();
+        
+        try
+        {
+            // 2. İsteği bir sonraki adıma (Controller'a) devret
+            await _next(context);
+        }
+        finally
+        {
+            // 3. İstek bitti (başarılı veya hatalı), süreyi durdur
+            stopwatch.Stop();
 
-        _logger.LogInformation("HTTP {Method} {Path} from {IP} UA:{UserAgent} Auth:{Auth}", method, path, ip, userAgent, auth);
+            // 4. Detayları topla
+            var method = context.Request.Method;
+            var path = context.Request.Path;
+            var statusCode = context.Response.StatusCode;
+            var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            
+            // User-Agent bazen boş olabilir, null check yapalım
+            var userAgent = context.Request.Headers["User-Agent"].ToString();
+            if (userAgent.Length > 100) userAgent = userAgent.Substring(0, 100) + "..."; // Çok uzunsa kırp
 
-        await _next(context);
+            // Kullanıcı kim?
+            var user = context.User?.Identity?.IsAuthenticated == true 
+                ? context.User.Identity.Name ?? "AuthenticatedUser" 
+                : "Anonymous";
+
+            // 5. Log Seviyesini Belirle (Hata varsa Warning, yoksa Info)
+            var logLevel = statusCode >= 500 ? LogLevel.Error :
+                           statusCode >= 400 ? LogLevel.Warning : 
+                           LogLevel.Information;
+
+            // 6. Yapısal (Structured) Loglama yap
+            // Mesajın sonuna "in {Elapsed}ms" ekledik.
+            _logger.Log(logLevel, 
+                "HTTP {Method} {Path} responded {StatusCode} in {Elapsed:0.0000}ms. IP: {IP} User: {User}",
+                method, path, statusCode, stopwatch.Elapsed.TotalMilliseconds, ip, user);
+        }
     }
 }

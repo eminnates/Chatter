@@ -1,60 +1,110 @@
+using System.Security.Claims;
+using Chatter.API.Hubs;
 using Chatter.Application.DTOs.Chat;
 using Chatter.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Chatter.API.Controllers;
 
-[ApiController]
-[Route("api/[controller]")]
 [Authorize]
-public class ChatController : ControllerBase
+public class ChatController : BaseApiController // ControllerBase yerine BaseApiController
 {
     private readonly IChatService _chatService;
+    private readonly IHubContext<ChatHub> _hubContext;
 
-    public ChatController(IChatService chatService)
+    public ChatController(IChatService chatService, IHubContext<ChatHub> hubContext)
     {
         _chatService = chatService;
+        _hubContext = hubContext;
     }
 
+    // 1. Sohbet ID'si Alma veya Oluşturma
     [HttpPost("conversation/{targetUserId}")]
-    public async Task<IActionResult> GetOrCreateConversation(string targetUserId)
+    public async Task<IActionResult> GetOrCreateConversation(Guid targetUserId)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var conversationId = await _chatService.CreatePrivateConversationAsync(userId!, targetUserId);
-        return Ok(new { success = true, data = new { conversationId } });
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        // Servis Result<Guid> dönüyor
+        var result = await _chatService.CreatePrivateConversationAsync(currentUserId, targetUserId);
+        
+        // HandleResult: Başarılıysa Ok(Guid), başarısızsa BadRequest(Error) döner
+        return HandleResult(result);
     }
 
+    // 2. Kullanıcının Sohbetlerini Listeleme
     [HttpGet("conversations")]
     public async Task<IActionResult> GetConversations()
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var conversations = await _chatService.GetUserConversationsAsync(userId!);
-        return Ok(new { success = true, data = conversations });
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.GetUserConversationsAsync(currentUserId);
+        
+        return HandleResult(result);
     }
 
+    // 3. Sohbet Geçmişini Getirme
     [HttpGet("messages/{conversationId}")]
     public async Task<IActionResult> GetMessages(Guid conversationId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var messages = await _chatService.GetConversationMessagesAsync(conversationId, page, pageSize, userId!);
-        return Ok(new { success = true, data = messages });
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.GetConversationMessagesAsync(conversationId, page, pageSize, currentUserId);
+
+        return HandleResult(result);
     }
 
+    // 4. Mesaj Gönderme
     [HttpPost("send")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var message = await _chatService.SendMessageAsync(request, userId!);
-        return Ok(new { success = true, data = message });
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.SendMessageAsync(request, currentUserId);
+
+        return HandleResult(result);
     }
 
-    [HttpPost("read/{conversationId}")]
-    public async Task<IActionResult> MarkAsRead(Guid conversationId)
+    // 5. OKUNDU İŞARETLEME
+    // Frontend'den gelen string ID'yi Guid olarak alıyoruz (ASP.NET otomatik çevirir)
+    [HttpPost("mark-read/{senderId}")]
+    public async Task<IActionResult> MarkAsRead(Guid senderId)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        await _chatService.MarkMessagesAsReadAsync(conversationId, userId!);
-        return Ok(new { success = true, message = "Mesajlar okundu olarak işaretlendi." });
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        // A) Önce bu iki kişi arasındaki sohbet ID'sini bul
+        // Not: CreatePrivateConversationAsync mevcut sohbet varsa ID'sini döner
+        var convResult = await _chatService.CreatePrivateConversationAsync(currentUserId, senderId);
+        
+        if (!convResult.IsSuccess) 
+            return HandleResult(convResult); // Hata varsa dön
+
+        // B) Mesajları veritabanında "Okundu" yap
+        var readResult = await _chatService.MarkMessagesAsReadAsync(convResult.Value, currentUserId);
+
+        if (readResult.IsSuccess)
+        {
+            // C) SignalR ile karşı tarafa (mesajı atana) "Görüldü" haberi yolla
+            // SignalR user ID'leri genelde string tutar, o yüzden ToString()
+            await _hubContext.Clients.User(senderId.ToString()).SendAsync("MessagesRead", currentUserId);
+        }
+
+        return HandleResult(readResult);
+    }
+
+    // --- Yardımcı Metot ---
+    // Bunu BaseApiController içine de taşıyabilirsin, burada private olarak da kalabilir.
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        userId = Guid.Empty;
+        var claimValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        return !string.IsNullOrEmpty(claimValue) && Guid.TryParse(claimValue, out userId);
     }
 }

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using DotNetEnv;
-
+using Chatter.Domain.Entities; // <-- BUNU EKLEDİK (AppRole için şart)
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,11 +25,12 @@ if (File.Exists(".env"))
 
 // Override configuration with environment variables
 builder.Configuration.AddEnvironmentVariables();
-
+// Servisi ekle
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -116,20 +117,23 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// Seed Roles
+// --- SEED ROLES (DÜZELTİLEN KISIM) ---
 using (var scope = app.Services.CreateScope())
 {
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    // HATA BURADAYDI: RoleManager<IdentityRole> yerine RoleManager<AppRole> yaptık.
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     var roles = new[] { "User", "Admin", "Moderator" };
     
     foreach (var role in roles)
     {
         if (!await roleManager.RoleExistsAsync(role))
         {
-            await roleManager.CreateAsync(new IdentityRole(role));
+            // HATA BURADAYDI: new IdentityRole(role) yerine new AppRole { Name = role } yaptık.
+            await roleManager.CreateAsync(new AppRole { Name = role });
         }
     }
 }
+// -------------------------------------
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

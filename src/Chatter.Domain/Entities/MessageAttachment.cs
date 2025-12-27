@@ -3,9 +3,12 @@ using Chatter.Domain.Enums;
 
 namespace Chatter.Domain.Entities
 {
+    // BaseEntity<Guid> olması doğru, çünkü bu tablonun ID'si de Guid olsun.
     public class MessageAttachment : BaseEntity<Guid>
     {
+        // Message tablosunun ID'si Guid olduğu için burası da Guid olmalı.
         public Guid MessageId { get; set; }
+        
         public string FileName { get; set; } = string.Empty;
         public string FileUrl { get; set; } = string.Empty;
         public AttachmentType Type { get; set; }

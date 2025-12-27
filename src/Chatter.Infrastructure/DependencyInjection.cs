@@ -39,7 +39,7 @@ public static class DependencyInjection
             options.Lockout.MaxFailedAccessAttempts = 5;
             options.Lockout.AllowedForNewUsers = true;
         })
-        .AddRoles<IdentityRole>()
+        .AddRoles<AppRole>()
         .AddEntityFrameworkStores<ChatterDbContext>();
 
         // Repositories

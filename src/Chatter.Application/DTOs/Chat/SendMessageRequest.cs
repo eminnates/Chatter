@@ -9,17 +9,16 @@ public class SendMessageRequest
     public Guid? ConversationId { get; set; }
     
     [JsonPropertyName("receiverId")]
-    public string? ReceiverId { get; set; }
+    public Guid? ReceiverId { get; set; } // string -> Guid?
     
-    [Required(ErrorMessage = "Message content is required")]
-    [StringLength(5000, MinimumLength = 1, ErrorMessage = "Message must be between 1 and 5000 characters")]
+    [Required(ErrorMessage = "Mesaj içeriği boş olamaz")]
+    [StringLength(5000, MinimumLength = 1, ErrorMessage = "Mesaj 1-5000 karakter arasında olmalıdır")]
     [JsonPropertyName("content")]
     public string Content { get; set; } = string.Empty;
     
-    [StringLength(50, ErrorMessage = "Message type cannot exceed 50 characters")]
     [JsonPropertyName("type")]
-    public string? Type { get; set; }
+    public string? Type { get; set; } = "Text";
     
     [JsonPropertyName("replyToMessageId")]
-    public string? ReplyToMessageId { get; set; }
+    public Guid? ReplyToMessageId { get; set; } // string -> Guid?
 }

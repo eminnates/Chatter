@@ -1,15 +1,19 @@
 using Chatter.Domain.Entities;
+using Chatter.Domain.Models;
 
 namespace Chatter.Domain.Interfaces
 {
-    public interface IUserRepository : IGenericRepository<AppUser>
+    public interface IUserRepository : IGenericRepository<AppUser, Guid>
     {
-        Task<AppUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
-        Task<AppUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
-        Task<AppUser?> GetWithConnectionsAsync(string userId, CancellationToken cancellationToken = default);
-        Task<IEnumerable<AppUser>> GetOnlineUsersAsync(CancellationToken cancellationToken = default);
-        Task<IEnumerable<AppUser>> SearchUsersAsync(string searchTerm, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
-        Task<bool> IsUserOnlineAsync(string userId, CancellationToken cancellationToken = default);
-        Task UpdateLastSeenAsync(string userId, CancellationToken cancellationToken = default);
+        // GetByIdAsync BURADAN SİLİNDİ (Miras yoluyla geliyor)
+        
+        Task<IEnumerable<UserWithChatStats>> GetUsersWithChatStatsAsync(Guid currentUserId);
+        
+        Task<AppUser?> GetByEmailAsync(string email);
+        Task<AppUser?> GetByUsernameAsync(string username);
+        Task<IEnumerable<AppUser>> GetAllAsync();
+        Task<IEnumerable<AppUser>> SearchUsersAsync(string searchTerm, int page, int pageSize);
+        Task UpdateAsync(AppUser user);
+        Task<bool> ExistsAsync(Guid id);
     }
 }

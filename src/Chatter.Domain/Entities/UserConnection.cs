@@ -2,10 +2,16 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Entities
 {
-    public class UserConnection : BaseEntity<int>
+    // DEĞİŞİKLİK 1: BaseEntity<int> -> BaseEntity<Guid>
+    public class UserConnection : BaseEntity<Guid>
     {
-        public string UserId { get; set; } = string.Empty;
+        // DEĞİŞİKLİK 2: string UserId -> Guid UserId
+        // AppUser ile ilişki için zorunlu.
+        public Guid UserId { get; set; }
+        
+        // DİKKAT: SignalR ID'leri string gelir, burası string kalmalı.
         public string ConnectionId { get; set; } = string.Empty;
+        
         public string? UserAgent { get; set; }
         public string? IpAddress { get; set; }
         public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;

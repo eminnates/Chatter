@@ -2,10 +2,16 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Entities
 {
-    public class MessageReaction : BaseEntity<int>
+    // DEĞİŞİKLİK 1: BaseEntity<int> -> BaseEntity<Guid>
+    // Tablonun kendi ID'si standartlara uygun olarak Guid oldu.
+    public class MessageReaction : BaseEntity<Guid>
     {
         public Guid MessageId { get; set; }
-        public string UserId { get; set; } = string.Empty;
+        
+        // DEĞİŞİKLİK 2: string UserId -> Guid UserId
+        // AppUser ile ilişkinin kurulabilmesi için tipler eşleşmeli.
+        public Guid UserId { get; set; } 
+        
         public string Emoji { get; set; } = string.Empty;
 
         // Navigation properties

@@ -6,7 +6,11 @@ namespace Chatter.Domain.Entities
     public class Message : BaseEntity<Guid>
     {
         public Guid ConversationId { get; set; }
-        public string SenderId { get; set; } = string.Empty;
+        
+        // DEĞİŞİKLİK: string -> Guid yaptık.
+        // AppUser (Sender) ile ilişki kurabilmesi için tiplerin eşleşmesi şart.
+        public Guid SenderId { get; set; } 
+        
         public string Content { get; set; } = string.Empty;
         public MessageType Type { get; set; } = MessageType.Text;
         public MessageStatus Status { get; set; } = MessageStatus.Sent;
@@ -14,8 +18,11 @@ namespace Chatter.Domain.Entities
         public DateTime? DeliveredAt { get; set; }
         public DateTime? ReadAt { get; set; }
         public DateTime? EditedAt { get; set; }
+        
+        // Soft Delete (Veri tabanında kalır ama silindi görünür)
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
+        
         public Guid? ReplyToMessageId { get; set; }
 
         // Navigation properties
@@ -67,7 +74,8 @@ namespace Chatter.Domain.Entities
         {
             IsDeleted = true;
             DeletedAt = DateTime.UtcNow;
-            Content = "This message was deleted";
+            // WhatsApp tarzı: İçeriği değiştiriyoruz
+            Content = "Bu mesaj silindi"; 
             UpdatedAt = DateTime.UtcNow;
         }
 

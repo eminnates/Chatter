@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Chatter.Infrastructure.Repositories;
 
-public class MessageRepository : GenericRepository<Message>, IMessageRepository
+public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepository
 {
     public MessageRepository(ChatterDbContext context) : base(context)
     {
@@ -30,9 +30,11 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Message>> GetUnreadMessagesAsync(Guid conversationId, string userId, CancellationToken cancellationToken = default)
+    // DÜZELTME: string userId -> Guid userId
+    public async Task<IEnumerable<Message>> GetUnreadMessagesAsync(Guid conversationId, Guid userId, CancellationToken cancellationToken = default)
     {
         var participant = await _context.ConversationParticipants
+            // cp.UserId (Guid) == userId (Guid) -> Tip güvenli
             .FirstOrDefaultAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId, cancellationToken);
 
         if (participant == null)
@@ -40,13 +42,14 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
 
         return await _dbSet
             .Where(m => m.ConversationId == conversationId &&
-                       m.SenderId != userId &&
+                       m.SenderId != userId && // Kendi mesajımız okunmamış sayılmaz
                        !m.IsDeleted &&
                        (participant.LastReadAt == null || m.SentAt > participant.LastReadAt))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<int> GetUnreadCountAsync(Guid conversationId, string userId, CancellationToken cancellationToken = default)
+    // DÜZELTME: string userId -> Guid userId
+    public async Task<int> GetUnreadCountAsync(Guid conversationId, Guid userId, CancellationToken cancellationToken = default)
     {
         var participant = await _context.ConversationParticipants
             .FirstOrDefaultAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId, cancellationToken);
@@ -70,7 +73,8 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task MarkMessagesAsReadAsync(Guid conversationId, string userId, CancellationToken cancellationToken = default)
+    // DÜZELTME: string userId -> Guid userId
+    public async Task MarkMessagesAsReadAsync(Guid conversationId, Guid userId, CancellationToken cancellationToken = default)
     {
         var messages = await _dbSet
             .Where(m => m.ConversationId == conversationId &&
@@ -95,7 +99,7 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
 
     public async Task<IEnumerable<Message>> SearchMessagesAsync(
         Guid conversationId,
-        string searchTerm,
+        string searchTerm, // Arama metni string kalmalı
         CancellationToken cancellationToken = default)
     {
         return await _dbSet
@@ -118,13 +122,19 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
     }
 
-    public async Task<bool> CanUserEditMessageAsync(Guid messageId, string userId, CancellationToken cancellationToken = default)
+    // DÜZELTME: string userId -> Guid userId
+    public async Task<bool> CanUserEditMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
     {
+        // FindAsync object array alır ama bizim ID'miz Guid. 
+        // EF Core bunu otomatik map eder.
         var message = await _dbSet.FindAsync(new object[] { messageId }, cancellationToken);
+        
+        // message.SenderId (Guid) == userId (Guid)
         return message != null && message.SenderId == userId && message.CanBeEdited();
     }
 
-    public async Task<bool> CanUserDeleteMessageAsync(Guid messageId, string userId, CancellationToken cancellationToken = default)
+    // DÜZELTME: string userId -> Guid userId
+    public async Task<bool> CanUserDeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
     {
         var message = await _dbSet
             .Include(m => m.Conversation)
@@ -133,9 +143,10 @@ public class MessageRepository : GenericRepository<Message>, IMessageRepository
 
         if (message == null || !message.CanBeDeleted()) return false;
 
-        // Kendi mesajını silebilir veya Admin/Owner silebilir
+        // Kendi mesajını silebilir
         if (message.SenderId == userId) return true;
 
+        // Veya Admin/Owner silebilir
         var participant = message.Conversation.Participants.FirstOrDefault(p => p.UserId == userId);
         return participant?.Role is ParticipantRole.Admin or ParticipantRole.Owner;
     }

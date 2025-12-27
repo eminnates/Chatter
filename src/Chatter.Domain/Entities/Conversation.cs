@@ -8,7 +8,11 @@ namespace Chatter.Domain.Entities
         public string? Name { get; set; }
         public ConversationType Type { get; set; } = ConversationType.OneToOne;
         public string? GroupImageUrl { get; set; }
-        public string? CreatedByUserId { get; set; }
+        
+        // DEĞİŞİKLİK: string? -> Guid?
+        // Grubu oluşturan kişi null olabilir (sistem oluşturduysa) ama varsa Guid olmalı.
+        public Guid? CreatedByUserId { get; set; }
+        
         public Guid? LastMessageId { get; set; }
         public bool IsActive { get; set; } = true;
 

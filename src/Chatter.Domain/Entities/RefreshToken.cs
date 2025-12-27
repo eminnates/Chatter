@@ -2,9 +2,14 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Entities
 {
-    public class RefreshToken : BaseEntity<int>
+    // DEĞİŞİKLİK 1: BaseEntity<int> yerine BaseEntity<Guid> yaptık.
+    // Artık RefreshToken ID'leri de Guid olacak.
+    public class RefreshToken : BaseEntity<Guid>
     {
-        public string UserId { get; set; } = string.Empty;
+        // DEĞİŞİKLİK 2: string UserId -> Guid UserId
+        // AppUser ile ilişki kurabilmesi için bu zorunlu.
+        public Guid UserId { get; set; } 
+        
         public string Token { get; set; } = string.Empty;
         public string JwtId { get; set; } = string.Empty;
         public bool IsUsed { get; set; }

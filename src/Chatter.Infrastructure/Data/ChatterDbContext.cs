@@ -1,10 +1,15 @@
 using Chatter.Domain.Entities;
+using Microsoft.AspNetCore.Identity; // IdentityRole için gerekli
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Chatter.Infrastructure.Data;
 
-public class ChatterDbContext : IdentityDbContext<AppUser>
+// DEĞİŞİKLİK BURADA:
+// 1. AppUser: Senin kullanıcı sınıfın
+// 2. IdentityRole<Guid>: Rollerin de ID'si Guid olsun
+// 3. Guid: Primary Key tipi
+public class ChatterDbContext : IdentityDbContext<AppUser, AppRole, Guid>
 {
     public ChatterDbContext(DbContextOptions<ChatterDbContext> options) : base(options)
     {
@@ -24,8 +29,10 @@ public class ChatterDbContext : IdentityDbContext<AppUser>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        
+        // Postgres için Guid üretimi (uuid-ossp) veya tablo adlarını düzenlemek istersen buraya ekleyebilirsin.
+        // Ama şimdilik standart konfigürasyon yeterli.
 
-        // Apply all configurations from assembly
         builder.ApplyConfigurationsFromAssembly(typeof(ChatterDbContext).Assembly);
     }
 }

@@ -1,5 +1,7 @@
+using Chatter.Domain.Entities;
 using Chatter.Domain.Interfaces;
 using Chatter.Infrastructure.Data;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Chatter.Infrastructure.Repositories;
@@ -7,6 +9,9 @@ namespace Chatter.Infrastructure.Repositories;
 public class UnitOfWork : IUnitOfWork
 {
     private readonly ChatterDbContext _context;
+    // UserRepository oluşturmak için gerekli
+    private readonly UserManager<AppUser> _userManager; 
+    
     private IDbContextTransaction? _transaction;
 
     // Lazy initialization for repositories
@@ -16,16 +21,19 @@ public class UnitOfWork : IUnitOfWork
     private IRefreshTokenRepository? _refreshTokens;
     private IUserConnectionRepository? _userConnections;
 
-    public UnitOfWork(ChatterDbContext context)
+    // UserManager'ı da constructor'a ekledik
+    public UnitOfWork(ChatterDbContext context, UserManager<AppUser> userManager)
     {
         _context = context;
+        _userManager = userManager;
     }
 
     public IUserRepository Users
     {
         get
         {
-            _users ??= new UserRepository(_context);
+            // UserManager ve Context'i birlikte gönderiyoruz
+            _users ??= new UserRepository(_context, _userManager);
             return _users;
         }
     }
@@ -120,5 +128,7 @@ public class UnitOfWork : IUnitOfWork
     {
         _transaction?.Dispose();
         _context.Dispose();
+        // İyi bir pratik olarak Finalizer'ı susturuyoruz
+        GC.SuppressFinalize(this); 
     }
 }

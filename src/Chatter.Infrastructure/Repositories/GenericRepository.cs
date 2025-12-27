@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Chatter.Infrastructure.Repositories;
 
-public class GenericRepository<T> : IGenericRepository<T> where T : class
+// DÜZELTME: <T> yerine <T, TKey> yaptık.
+public class GenericRepository<T, TKey> : IGenericRepository<T, TKey> 
+    where T : class 
+    where TKey : struct // Guid bir struct'tır
 {
     protected readonly ChatterDbContext _context;
     protected readonly DbSet<T> _dbSet;
@@ -16,7 +19,8 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
         _dbSet = context.Set<T>();
     }
 
-    public async Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
+    // DÜZELTME: object id -> TKey id
+    public virtual async Task<T?> GetByIdAsync(TKey id, CancellationToken cancellationToken = default)
     {
         return await _dbSet.FindAsync(new object[] { id }, cancellationToken);
     }
@@ -111,6 +115,18 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
     public void Remove(T entity)
     {
         _dbSet.Remove(entity);
+    }
+
+    // EKSİK OLAN IMPLEMENTASYON BU:
+    public void RemoveById(TKey id)
+    {
+        // Find işlemi senkron olmadığı için dummy entity oluşturup siliyoruz
+        // veya önce bulup siliyoruz. En güvenlisi bulup silmek.
+        var entity = _dbSet.Find(id);
+        if (entity != null)
+        {
+            _dbSet.Remove(entity);
+        }
     }
 
     public void RemoveRange(IEnumerable<T> entities)

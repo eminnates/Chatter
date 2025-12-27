@@ -3,10 +3,16 @@ using Chatter.Domain.Enums;
 
 namespace Chatter.Domain.Entities
 {
-    public class ConversationParticipant : BaseEntity<int>
+    // DEĞİŞİKLİK 1: BaseEntity<int> -> BaseEntity<Guid>
+    // Tablonun kendi ID'si de artık Guid olacak.
+    public class ConversationParticipant : BaseEntity<Guid>
     {
         public Guid ConversationId { get; set; }
-        public string UserId { get; set; } = string.Empty;
+        
+        // DEĞİŞİKLİK 2: string UserId -> Guid UserId
+        // AppUser ile ilişkinin kurulabilmesi için tipler eşleşmeli.
+        public Guid UserId { get; set; }
+        
         public ParticipantRole Role { get; set; } = ParticipantRole.Member;
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
         public DateTime? LeftAt { get; set; }

@@ -3,7 +3,8 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Entities
 {
-    public class AppUser : IdentityUser  // ← Identity'den türesin
+    // DEĞİŞİKLİK BURADA: <Guid> ekledik.
+    public class AppUser : IdentityUser<Guid> 
     {
         // ====== Profil Bilgileri ======
         public string FullName { get; set; } = string.Empty;

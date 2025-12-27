@@ -2,20 +2,20 @@ using Chatter.Application.DTOs.Auth;
 using Chatter.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Chatter.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController : ControllerBase
+public class AuthController : BaseApiController // ControllerBase yerine BaseApiController
 {
     private readonly IAuthService _authService;
-    private readonly ILogger<AuthController> _logger;
+    // ILogger business logic için kaldırıldı, kritik hataları middleware yakalar.
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -25,34 +25,11 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        try
-        {
-            var response = await _authService.RegisterAsync(request);
-            return Ok(new
-            {
-                success = true,
-                message = "Kullanıcı başarıyla oluşturuldu.",
-                data = response
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Register işlemi başarısız: {Message}", ex.Message);
-            return BadRequest(new
-            {
-                success = false,
-                message = ex.Message
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Register işlemi sırasında hata oluştu");
-            return StatusCode(500, new
-            {
-                success = false,
-                message = "Bir hata oluştu. Lütfen daha sonra tekrar deneyin."
-            });
-        }
+        // Servis Result<Guid> dönüyor
+        var result = await _authService.RegisterAsync(request);
+        
+        // HandleResult, başarılıysa Ok(Guid), başarısızsa BadRequest(Error) döner.
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -62,25 +39,10 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        try
-        {
-            var response = await _authService.LoginAsync(request);
-            return Ok(new
-            {
-                success = true,
-                message = "Giriş başarılı.",
-                data = response
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Login işlemi sırasında hata oluştu");
-            return Unauthorized(new
-            {
-                success = false,
-                message = "Kullanıcı adı veya şifre hatalı."
-            });
-        }
+        // Servis Result<LoginResponse> dönüyor
+        var result = await _authService.LoginAsync(request);
+        
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -90,30 +52,18 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        try
-        {
-            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                return Unauthorized(new { success = false, message = "Geçersiz kullanıcı." });
-            }
+        // 1. Token'dan User ID'yi güvenli şekilde al
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            var response = await _authService.ChangePasswordAsync(request, userId);
-            return Ok(new
-            {
-                success = true,
-                message = "Şifre başarıyla değiştirildi.",
-                data = response
-            });
-        }
-        catch (Exception ex)
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
-            _logger.LogError(ex, "Şifre değiştirme işlemi sırasında hata oluştu");
-            return BadRequest(new
-            {
-                success = false,
-                message = ex.Message
-            });
+            // BaseApiController yapısına uygun hata dönüşü
+            return Unauthorized(new { error = new { code = "Auth.InvalidToken", message = "Geçersiz oturum bilgisi." } });
         }
+
+        // 2. Servisi çağır (Result<bool> döner)
+        var result = await _authService.ChangePasswordAsync(request, userId);
+
+        return HandleResult(result);
     }
 }
