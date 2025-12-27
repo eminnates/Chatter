@@ -148,7 +148,7 @@ else
     app.UseHttpsRedirection();
 }
 
-
+app.UseStaticFiles();
 // Add global exception handler middleware
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 

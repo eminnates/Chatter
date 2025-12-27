@@ -1,0 +1,26 @@
+# Build aşaması
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /app
+
+# Proje dosyalarını kopyala ve restore et
+COPY *.sln .
+COPY src/Chatter.API/*.csproj src/Chatter.API/
+COPY src/Chatter.Application/*.csproj src/Chatter.Application/
+COPY src/Chatter.Domain/*.csproj src/Chatter.Domain/
+COPY src/Chatter.Infrastructure/*.csproj src/Chatter.Infrastructure/
+RUN dotnet restore
+
+# Tüm kodu kopyala ve yayınla
+COPY . .
+WORKDIR /app/src/Chatter.API
+RUN dotnet publish -c Release -o /app/out
+
+# Runtime aşaması
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+COPY --from=build /app/out .
+
+# Uploads klasörünü oluştur ve izin ver
+RUN mkdir -p wwwroot/uploads && chmod 777 wwwroot/uploads
+
+ENTRYPOINT ["dotnet", "Chatter.API.dll"]

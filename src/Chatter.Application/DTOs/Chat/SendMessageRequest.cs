@@ -1,24 +1,17 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+using Chatter.Domain.Enums;
 
 namespace Chatter.Application.DTOs.Chat;
 
 public class SendMessageRequest
 {
-    [JsonPropertyName("conversationId")]
+    public Guid? ReceiverId { get; set; }
     public Guid? ConversationId { get; set; }
+    public string? Content { get; set; }
+    public MessageType Type { get; set; } = MessageType.Text;
     
-    [JsonPropertyName("receiverId")]
-    public Guid? ReceiverId { get; set; } // string -> Guid?
-    
-    [Required(ErrorMessage = "Mesaj içeriği boş olamaz")]
-    [StringLength(5000, MinimumLength = 1, ErrorMessage = "Mesaj 1-5000 karakter arasında olmalıdır")]
-    [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
-    
-    [JsonPropertyName("type")]
-    public string? Type { get; set; } = "Text";
-    
-    [JsonPropertyName("replyToMessageId")]
-    public Guid? ReplyToMessageId { get; set; } // string -> Guid?
+    // Hata CS1061'i çözer:
+    public Guid? ReplyToMessageId { get; set; }
+
+    // Attachment hatalarını çözer:
+    public AttachmentRequest? Attachment { get; set; }
 }

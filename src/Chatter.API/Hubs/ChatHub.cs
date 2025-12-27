@@ -46,6 +46,7 @@ public class ChatHub : Hub
             {
                 user.SetOnlineStatus(true);
                 await _unitOfWork.SaveChangesAsync();
+                await Clients.All.SendAsync("UserOnline", userId);
             }
 
             // (Opsiyonel) Kullanıcıyı kendi User ID'si ile bir gruba ekleyebilirsin
@@ -69,6 +70,8 @@ public class ChatHub : Hub
             {
                 user.SetOnlineStatus(false);
                 user.LastSeenAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync();
+                await Clients.All.SendAsync("UserOffline", userId);
             }
             
             await _unitOfWork.SaveChangesAsync();

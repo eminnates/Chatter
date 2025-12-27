@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chatter_db
+    restart: always
+    environment:
+      POSTGRES_USER: chatter_admin
+      POSTGRES_PASSWORD: your_very_strong_password
+      POSTGRES_DB: chatterdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Chatter.API/Dockerfile
+    container_name: chatter_api
+    restart: always
+    ports:
+      - "80:8080" # Dış dünyaya 80 portundan açıyoruz
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Database=chatterdb;Username=chatter_admin;Password=your_very_strong_password
+      - JWT_SECRET_KEY=CokGizliProductionKey_2025_ABC!
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      - db
+    volumes:
+      - ./uploads:/app/wwwroot/uploads
+
+volumes:
+  postgres_data:

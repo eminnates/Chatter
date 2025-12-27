@@ -27,7 +27,6 @@ public class ChatService : IChatService
             {
                 conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(request.ConversationId.Value);
             }
-            // DÜZELTME: ReceiverId zaten Guid? ise string'e çevirip parse etmeye gerek yok. HasValue kontrolü yeterli.
             else if (request.ReceiverId.HasValue)
             {
                 var receiverGuid = request.ReceiverId.Value;
@@ -51,14 +50,14 @@ public class ChatService : IChatService
                     };
                     
                     conversation.Participants = participants;
-                    await _unitOfWork.SaveChangesAsync(); // ID oluşması için kaydet
+                    await _unitOfWork.SaveChangesAsync(); 
                 }
             }
 
             if (conversation == null)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                return Result<MessageDto>.Failure(new Error("Chat.ConversationError", "Konuşma bulunamadı veya alıcı bilgisi geçersiz."));
+                return Result<MessageDto>.Failure(new Error("Chat.ConversationError", "Konuşma bulunamadı."));
             }
 
             // 2. Mesajı Oluştur
@@ -66,22 +65,36 @@ public class ChatService : IChatService
             {
                 ConversationId = conversation.Id,
                 SenderId = senderId,
-                Content = request.Content,
+                Content = request.Content ?? (request.Attachment != null ? "" : string.Empty),
+                Type = request.Attachment != null ? (MessageType)request.Attachment.Type : MessageType.Text,
                 SentAt = DateTime.UtcNow,
                 Status = MessageStatus.Sent,
-                Type = MessageType.Text,
-                // DÜZELTME: Doğrudan atama (Guid? -> Guid?)
-                ReplyToMessageId = request.ReplyToMessageId 
+                ReplyToMessageId = request.ReplyToMessageId
             };
 
+            // EKLERİ KAYDET
+            if (request.Attachment != null)
+            {
+                var attachment = new MessageAttachment
+                {
+                    MessageId = message.Id,
+                    FileName = request.Attachment.FileName,
+                    FileUrl = request.Attachment.FileUrl,
+                    Type = (AttachmentType)request.Attachment.Type,
+                    FileSize = request.Attachment.FileSize,
+                    MimeType = request.Attachment.MimeType,
+                    UploadedAt = DateTime.UtcNow
+                };
+                message.Attachments.Add(attachment);
+            }
+
             await _unitOfWork.Messages.AddAsync(message);
-            await _unitOfWork.SaveChangesAsync(); 
+            await _unitOfWork.SaveChangesAsync();
             
             // 3. Konuşma Bilgilerini Güncelle
             conversation.LastMessageId = message.Id;
             conversation.UpdatedAt = DateTime.UtcNow;
             
-            // Katılımcıların okunmamış sayısını artır
             foreach (var participant in conversation.Participants.Where(p => p.UserId != senderId))
             {
                 participant.UnreadCount++;
@@ -90,7 +103,7 @@ public class ChatService : IChatService
             await _unitOfWork.SaveChangesAsync();
             await _unitOfWork.CommitTransactionAsync();
 
-            // 4. DTO Döndür
+            // 4. DTO DÖNDÜR (BURASI KRİTİK: Attachments eklendi)
             var messageDto = new MessageDto
             {
                 Id = message.Id,
@@ -100,8 +113,13 @@ public class ChatService : IChatService
                 Content = message.Content,
                 SentAt = message.SentAt,
                 IsRead = false,
-                // DÜZELTME (HATA 1): .ToString() kaldırıldı. Guid? -> Guid?
-                ReplyToMessageId = message.ReplyToMessageId 
+                ReplyToMessageId = message.ReplyToMessageId,
+                // ANLIK GÖRÜNTÜ İÇİN EKLERİ BURAYA DA EKLEMELİSİN
+                Attachments = message.Attachments.Select(a => new MessageAttachmentDto {
+                    FileName = a.FileName,
+                    FileUrl = a.FileUrl,
+                    Type = a.Type.ToString()
+                }).ToList()
             };
 
             return Result<MessageDto>.Success(messageDto);
@@ -132,7 +150,12 @@ public class ChatService : IChatService
             SentAt = m.SentAt,
             IsRead = m.Status == MessageStatus.Read,
             // DÜZELTME (HATA 2): .ToString() kaldırıldı
-            ReplyToMessageId = m.ReplyToMessageId
+            ReplyToMessageId = m.ReplyToMessageId,
+            Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
+            FileUrl = a.FileUrl,
+            FileName = a.FileName,
+            Type = a.Type.ToString()
+            }).ToList(),
         });
 
         return Result<IEnumerable<MessageDto>>.Success(dtos);
