@@ -3,8 +3,9 @@ import * as signalR from '@microsoft/signalr'
 import axios from 'axios'
 import './index.css'
 
-const API_URL = 'http://localhost:5157/api'
-const HUB_URL = 'http://localhost:5157/hubs/chat'
+const API_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/api';
+const HUB_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/hubs/chat';
+axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
 
 function App() {
   // === AUTH STATES ===
@@ -118,12 +119,14 @@ function App() {
       loadUsers(token)
 
       newConnection = new signalR.HubConnectionBuilder()
-        .withUrl(HUB_URL, { 
-          accessTokenFactory: () => token,
-          transport: signalR.HttpTransportType.WebSockets 
-        })
-        .withAutomaticReconnect()
-        .build()
+      .withUrl(HUB_URL, { 
+        accessTokenFactory: () => token,
+        transport: signalR.HttpTransportType.WebSockets,
+        // Ngrok için eklenen kısım:
+        headers: { "ngrok-skip-browser-warning": "true" } 
+      })
+      .withAutomaticReconnect()
+      .build()
 
       try {
         await newConnection.start()
@@ -626,7 +629,7 @@ function App() {
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 1 ? (
                           <img 
-                            src={`http://localhost:5157${att.fileUrl}`} 
+                            src={`${API_URL.replace('/api', '')}${att.fileUrl}`} 
                             alt={att.fileName}
                             style={{
                               maxWidth: '100%',

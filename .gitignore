@@ -107,4 +107,11 @@ node_modules/
 .env
 .env.local
 .env.*.local
+
 .env.production.local
+# Build outputs
+dist/
+dist_electron/
+
+# Uploaded files
+uploads/

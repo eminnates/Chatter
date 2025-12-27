@@ -1,14 +1,50 @@
 {
-  "name": "chatter-ui",
+  "name": "chatter",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "description": "Chatter Real-time Chat Application",
+  "author": {
+    "name": "Emin Ates",
+    "email": "mhmtmn1800@gmail.com"
+  },
+  "homepage": "https://github.com/eminnates/Chatter", 
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "electron": "wait-on tcp:5173 && electron .",
-    "start": "concurrently -k \"npm run dev\" \"npm run electron\""
+    "electron:build": "npm run build && electron-builder --win --linux"
+  },
+  "build": {
+    "appId": "com.chatter.app",
+    "productName": "Chatter",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.js",
+      "electron/preload.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "pacman", "deb"],
+      "maintainer": "Emin Ates <mhmtmn1800@gmail.com>",
+      "category": "Chat"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Chatter"
+    }
   },
   "dependencies": {
     "@microsoft/signalr": "^8.0.0",
@@ -22,6 +58,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "concurrently": "^8.0.0",
     "electron": "^28.0.0",
+    "electron-builder": "^24.9.1", 
     "vite": "^5.0.0",
     "wait-on": "^7.0.0"
   }
