@@ -38,6 +38,11 @@ builder.Services.AddSwaggerGen();
 var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
 var corsOrigins = corsOriginsEnv?.Split(",") ?? new[] { "http://localhost:5173", "http://localhost:3000" };
 
+if (builder.Environment.IsProduction() && (corsOrigins.Length == 2 && corsOrigins[0] == "http://localhost:5173"))
+{
+    throw new InvalidOperationException("CORS_ALLOWED_ORIGINS must be configured for production environment!");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigins",
@@ -67,7 +72,6 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // JWT - Read from environment
 var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") 
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLongChangeInProduction!";
-Console.WriteLine($"JWT_SECRET_KEY: {secretKey}");
 var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "ChatterAPI";
 var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "ChatterClient";
 
@@ -97,7 +101,8 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = issuer,
         ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(secretKey))
+            Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.FromMinutes(5)
     };
 
     options.Events = new JwtBearerEvents

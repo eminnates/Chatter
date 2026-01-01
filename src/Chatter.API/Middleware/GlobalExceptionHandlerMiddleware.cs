@@ -17,20 +17,30 @@ public class GlobalExceptionHandlerMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        var requestId = Guid.NewGuid().ToString();
+        context.Items["RequestId"] = requestId;
+        
         try
         {
             await _next(context);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception occurred: {Message}", ex.Message);
-            await HandleExceptionAsync(context, ex);
+            // Don't log sensitive data
+            var sanitizedPath = context.Request.Path.Value?.ToLower().Contains("password") == true 
+                ? "[REDACTED]" 
+                : context.Request.Path.Value;
+            
+            _logger.LogError(ex, "[{RequestId}] Unhandled exception on {Path}: {Message}", 
+                requestId, sanitizedPath, ex.Message);
+            await HandleExceptionAsync(context, ex, requestId);
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private static Task HandleExceptionAsync(HttpContext context, Exception exception, string requestId)
     {
         context.Response.ContentType = "application/json";
+        context.Response.Headers.Append("X-Request-Id", requestId);
 
         int statusCode;
         string errorCode;

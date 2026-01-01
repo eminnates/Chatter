@@ -358,6 +358,67 @@ body {
   transform: translateX(2px);
 }
 
+/* === TYPING INDICATOR === */
+.typing-indicator {
+  max-width: 65%;
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  animation: fadeIn 0.3s ease;
+}
+
+.typing-bubble {
+  background: var(--msg-received);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 16px 20px;
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  box-shadow: var(--shadow-md);
+}
+
+.typing-bubble span {
+  width: 8px;
+  height: 8px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typingDot 1.4s infinite;
+}
+
+.typing-bubble span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-bubble span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-bubble span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* === INPUT AREA === */
 .input-area {
   padding: 20px 30px;
@@ -689,4 +750,182 @@ body {
   .message {
     max-width: 85%;
   }
+
+  .toast {
+    top: 20px;
+    right: 20px;
+    left: 20px;
+    max-width: calc(100% - 40px);
+  }
+}
+
+/* === TOAST NOTIFICATIONS === */
+.toast {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  padding: 18px 24px;
+  border-radius: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.5;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  z-index: 9999;
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1), fadeOut 0.3s ease 3.7s;
+  min-width: 350px;
+  max-width: 550px;
+  backdrop-filter: blur(10px);
+  word-wrap: break-word;
+  white-space: normal;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.toast span {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.toast-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.toast-success .toast-icon {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.toast-error .toast-icon {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.toast-info .toast-icon {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* === TOAST NOTIFICATIONS === */
+.toast {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  padding: 16px 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 3.7s;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.toast-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.toast-success .toast-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.toast-error .toast-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.toast-info .toast-icon {
+  background: rgba(255, 255, 255, 0.2);
 }

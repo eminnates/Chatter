@@ -24,7 +24,11 @@ function App() {
   const [messages, setMessages] = useState([])
   const [messageInput, setMessageInput] = useState('')
   const [connection, setConnection] = useState(null)
+  const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [selectedFile, setSelectedFile] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const [typingTimeout, setTypingTimeout] = useState(null)
   
   // === LOGIN & REGISTER STATES ===
   const [isRegistering, setIsRegistering] = useState(false)
@@ -38,18 +42,64 @@ function App() {
 
   // === REFS ===
   const selectedUserRef = useRef(null) 
+  const userRef = useRef(user)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
+  const messageInputRef = useRef(null)
+  const loginEmailRef = useRef(null)
+  const registerUsernameRef = useRef(null)
+
+  // === TOAST NOTIFICATION ===
+  const showToast = useCallback((message, type = 'info') => {
+    let displayMessage = message
+    if (message.length > 150) {
+      displayMessage = message.substring(0, 150) + '...'
+    }
+    setToast({ message: displayMessage, type })
+  }, [])
 
   // === SYNC SELECTED USER REF ===
   useEffect(() => {
     selectedUserRef.current = selectedUser
   }, [selectedUser])
+  useEffect(() => {
+  userRef.current = user // User değiştikçe Ref'i güncelle
+  }, [user])
 
   // === AUTO SCROLL ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [messages, isTyping])
+
+  // === AUTO HIDE TOAST ===
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  // === AUTO FOCUS ON PAGE CHANGE ===
+  useEffect(() => {
+    if (!token) {
+      setTimeout(() => {
+        if (isRegistering) {
+          registerUsernameRef.current?.focus()
+        } else {
+          loginEmailRef.current?.focus()
+        }
+      }, 100)
+    }
+  }, [token, isRegistering])
+
+  // === AUTO FOCUS WHEN USER SELECTED ===
+  useEffect(() => {
+    if (selectedUser && messageInputRef.current) {
+      setTimeout(() => {
+        messageInputRef.current?.focus()
+      }, 100)
+    }
+  }, [selectedUser])
 
   // === MARK AS READ ===
   const markAsRead = useCallback(async (targetUserId) => {
@@ -67,7 +117,7 @@ function App() {
   }, [token])
 
   // === LOAD USERS ===
-  const loadUsers = useCallback(async (activeToken) => {
+  const loadUsers = useCallback(async (activeToken, retryCount = 0) => {
     try {
       const { data } = await axios.get(`${API_URL}/user`, {
         headers: { Authorization: `Bearer ${activeToken}` }
@@ -76,7 +126,15 @@ function App() {
       setUsers(userList) 
     } catch (error) {
       console.error('Load users error:', error)
-      if (error.response?.status === 401) logout()
+      if (error.response?.status === 401) {
+        logout()
+      } else if (retryCount < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000)
+        console.log(`Retrying loadUsers in ${delay}ms...`)
+        setTimeout(() => loadUsers(activeToken, retryCount + 1), delay)
+      } else {
+        showToast('Failed to load users. Please refresh.', 'error')
+      }
     }
   }, [])
 
@@ -116,80 +174,93 @@ function App() {
     let newConnection = null
 
     const setupSignalR = async () => {
+      setConnectionStatus('connecting')
       loadUsers(token)
 
       newConnection = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL, { 
-        accessTokenFactory: () => token,
-        transport: signalR.HttpTransportType.WebSockets,
-        // Ngrok için eklenen kısım:
-        headers: { "ngrok-skip-browser-warning": "true" } 
-      })
-      .withAutomaticReconnect()
-      .build()
+        .withUrl(HUB_URL, { 
+          accessTokenFactory: () => token,
+          transport: signalR.HttpTransportType.WebSockets,
+          headers: { "ngrok-skip-browser-warning": "true" } 
+        })
+        .withAutomaticReconnect()
+        .build()
 
       try {
         await newConnection.start()
         console.log("✅ SignalR Connected")
-        if (isMounted) setConnection(newConnection)
+        if (isMounted) {
+          setConnection(newConnection)
+          setConnectionStatus('connected')
+        }
 
         // === RECEIVE MESSAGE ===
-        newConnection.on('ReceiveMessage', (message) => {
-          const currentUser = JSON.parse(localStorage.getItem('user'))
-          const isMyMessage = message.senderId === currentUser?.id
-          const isFromSelectedUser = selectedUserRef.current?.id === message.senderId
+      newConnection.on('ReceiveMessage', (message) => {
+        // 1. Backend'den hangi formatta (senderId/SenderId) gelirse gelsin veriyi al
+        const senderId = message.senderId || message.SenderId;
+        const receiverId = message.receiverId || message.ReceiverId;
+        const content = message.content || message.Content;
 
-          console.log('📨 Message received:', { 
-            messageId: message.id, 
-            senderId: message.senderId, 
-            currentUserId: currentUser?.id, 
-            isMyMessage 
-          })
+        const incomingSenderId = senderId?.toLowerCase();
+        const currentUserId = userRef.current?.id?.toLowerCase(); // Ref kullanıyoruz
+        const selectedUserId = selectedUserRef.current?.id?.toLowerCase();
 
-          // Auto-mark as read if message is from selected user
-          if (!isMyMessage && isFromSelectedUser) {
-            markAsRead(message.senderId)
-          }
+        const isMyMessage = incomingSenderId === currentUserId;
+        const isFromSelectedUser = incomingSenderId === selectedUserId;
 
-          // Add message to chat if it's mine or from selected user
-          if (isMyMessage || isFromSelectedUser) {
-            setMessages(prev => {
-              // Optimistic update'i değiştir veya yeni mesaj ekle
-              const tempIndex = prev.findIndex(m => m.id.startsWith('temp-') && m.content === message.content)
-              if (tempIndex !== -1 && isMyMessage) {
-                // Temporary mesajı gerçek mesajla değiştir
-                const newMessages = [...prev]
-                newMessages[tempIndex] = message
-                return newMessages
-              }
-              
-              // Duplicate kontrolü
-              if (prev.some(m => m.id === message.id)) return prev
-              
-              return [...prev, message]
-            })
-          }
+        console.log('📨 SignalR Test:', { 
+          incomingSenderId, 
+          currentUserId, 
+          selectedUserId,
+          isMyMessage,
+          isFromSelectedUser 
+        });
 
-          // Update user list
-          setUsers(prevUsers => {
-            const userIndex = prevUsers.findIndex(u => 
-              u.id === (isMyMessage ? message.receiverId : message.senderId)
-            )
+        if (isMyMessage || isFromSelectedUser) {
+          setMessages(prev => {
+            // Mesaj zaten listede var mı? (Duplicate engelleme)
+            if (prev.some(m => m.id === message.id)) return prev;
 
-            if (userIndex === -1) return prevUsers
+            // Optimistic Update: Geçici mesajı bul ve gerçek olanla değiştir
+            const tempIndex = prev.findIndex(m => 
+              m.id.toString().startsWith('temp-') && m.content === content
+            );
 
-            const updatedUser = { ...prevUsers[userIndex], lastMessageAt: new Date() }
-
-            // Increment unread count if not from selected user
-            if (!isMyMessage && !isFromSelectedUser) {
-              updatedUser.unreadCount = (updatedUser.unreadCount || 0) + 1
+            if (tempIndex !== -1 && isMyMessage) {
+              const updated = [...prev];
+              updated[tempIndex] = message;
+              return updated;
             }
 
-            const newUsers = [...prevUsers]
-            newUsers.splice(userIndex, 1)
-            return [updatedUser, ...newUsers]
-          })
-        })
+            return [...prev, message];
+          });
+
+          if (isFromSelectedUser && !isMyMessage) {
+            markAsRead(senderId);
+            setIsTyping(false);
+          }
+        }
+
+        // Sidebar Güncelleme
+        setUsers(prevUsers => {
+          const targetId = isMyMessage ? receiverId?.toLowerCase() : incomingSenderId;
+          const userIndex = prevUsers.findIndex(u => u.id?.toLowerCase() === targetId);
+          
+          if (userIndex === -1) return prevUsers;
+
+          const updatedUser = { 
+            ...prevUsers[userIndex], 
+            lastMessageAt: new Date(),
+            unreadCount: (!isMyMessage && !isFromSelectedUser) 
+              ? (prevUsers[userIndex].unreadCount || 0) + 1 
+              : prevUsers[userIndex].unreadCount
+          };
+
+          const newUsers = [...prevUsers];
+          newUsers.splice(userIndex, 1);
+          return [updatedUser, ...newUsers];
+        });
+      });
 
         // === MESSAGES READ ===
         newConnection.on('MessagesRead', () => {
@@ -216,15 +287,38 @@ function App() {
             prev?.id === userId ? { ...prev, isOnline: false } : prev
           )
         })
+
+        // === USER TYPING ===
+        newConnection.on('UserTyping', (userId) => {
+          console.log(`⌨️ User ${userId} is typing`)
+          if (selectedUserRef.current?.id === userId) {
+            setIsTyping(true)
+            if (typingTimeout) clearTimeout(typingTimeout)
+            const timeout = setTimeout(() => setIsTyping(false), 3000)
+            setTypingTimeout(timeout)
+          }
+        })
+
+        newConnection.on('UserStoppedTyping', (userId) => {
+          console.log(`⌨️ User ${userId} stopped typing`)
+          if (selectedUserRef.current?.id === userId) {
+            setIsTyping(false)
+            if (typingTimeout) clearTimeout(typingTimeout)
+          }
+        })
         
         // === ERROR MESSAGE ===
         newConnection.on('ErrorMessage', (errorMsg) => {
           console.error("Backend Error:", errorMsg)
-          alert(errorMsg)
+          showToast(errorMsg, 'error')
         })
 
       } catch (err) {
         console.error('❌ SignalR Connection Error:', err)
+        if (isMounted) {
+          setConnectionStatus('failed')
+          showToast('Connection failed. Retrying...', 'error')
+        }
       }
     }
 
@@ -232,20 +326,25 @@ function App() {
 
     return () => {
       isMounted = false
+      setConnectionStatus('disconnected')
       if (newConnection) {
         newConnection.off('ReceiveMessage')
         newConnection.off('MessagesRead')
         newConnection.off('UserOnline')
         newConnection.off('UserOffline')
+        newConnection.off('UserTyping')
+        newConnection.off('UserStoppedTyping')
         newConnection.off('ErrorMessage')
-        newConnection.stop()
+        newConnection.stop().catch(err => console.error('SignalR stop error:', err))
       }
+      if (typingTimeout) clearTimeout(typingTimeout)
     }
-  }, [token, loadUsers, markAsRead])
+  }, [token, loadUsers, markAsRead, showToast])
 
   // === SELECT USER ===
   const handleSelectUser = useCallback((u) => {
     setSelectedUser(u)
+    setIsTyping(false)
     markAsRead(u.id)
   }, [markAsRead])
 
@@ -256,19 +355,30 @@ function App() {
     }
   }, [selectedUser?.id, token, loadMessages])
 
+  // === HANDLE TYPING ===
+  const handleTyping = useCallback(() => {
+    if (!connection || !selectedUser) return
+    try {
+      connection.invoke('NotifyTyping', selectedUser.id)
+    } catch (err) {
+      console.error('Typing notification error:', err)
+    }
+  }, [connection, selectedUser])
+
+  useEffect(() => {
+    if (messageInput && selectedUser && connection) {
+      handleTyping()
+    }
+  }, [messageInput, selectedUser, connection, handleTyping])
+
   // === SEND MESSAGE ===
   const sendMessage = async (e) => {
     e.preventDefault()
     
-    console.log('🚀 Send message attempt:', { 
-      hasMessage: !!messageInput.trim(), 
-      hasFile: !!selectedFile, 
-      hasSelectedUser: !!selectedUser, 
-      hasConnection: !!connection 
-    })
-
-    if ((!messageInput.trim() && !selectedFile) || !selectedUser || !connection) {
-      console.warn('⚠️ Cannot send: missing requirements')
+    if ((!messageInput.trim() && !selectedFile) || !selectedUser || !connection || connectionStatus !== 'connected') {
+      if (connectionStatus !== 'connected') {
+        showToast('Connection lost. Please wait...', 'error')
+      }
       return
     }
 
@@ -276,18 +386,15 @@ function App() {
     if (!currentUser) {
       try {
         const storedUser = localStorage.getItem('user')
-        console.log('📦 Stored user string:', storedUser)
         currentUser = storedUser ? JSON.parse(storedUser) : null
       } catch (err) {
         console.error('❌ Failed to parse user from localStorage:', err)
       }
     }
-    
-    console.log('👤 Current user:', currentUser)
 
     if (!currentUser?.id) {
-      console.error('❌ No user ID found. User object:', currentUser)
-      alert('User session expired. Please login again.')
+      console.error('❌ No user ID found')
+      showToast('Session expired. Please login again.', 'error')
       logout()
       return
     }
@@ -296,17 +403,13 @@ function App() {
     let attachmentData = null
 
     try {
-      // Upload file if exists
       if (selectedFile) {
-        console.log('📎 Uploading file...')
         const formData = new FormData()
         formData.append('file', selectedFile)
 
         const { data } = await axios.post(`${API_URL}/files/upload`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         })
-
-        console.log('✅ File uploaded:', data)
 
         attachmentData = {
           fileName: data.fileName,
@@ -317,7 +420,6 @@ function App() {
         }
       }
 
-      // Optimistic UI Update - mesajı hemen ekrana ekle
       const optimisticMessage = {
         id: `temp-${Date.now()}`,
         content: content,
@@ -334,26 +436,21 @@ function App() {
         }] : []
       }
 
-      console.log('📝 Adding optimistic message:', optimisticMessage)
       setMessages(prev => [...prev, optimisticMessage])
 
-      // Update user list - son mesaj zamanını güncelle
       setUsers(prev => {
         const userIndex = prev.findIndex(u => u.id === selectedUser.id)
         if (userIndex === -1) return prev
-        
         const updatedUser = { ...prev[userIndex], lastMessageAt: new Date() }
         const newUsers = [...prev]
         newUsers.splice(userIndex, 1)
         return [updatedUser, ...newUsers]
       })
 
-      // Clear inputs
       setMessageInput('')
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
 
-      // Send message via SignalR
       const messagePayload = { 
         receiverId: selectedUser.id, 
         content: content || null,
@@ -361,37 +458,32 @@ function App() {
         type: attachmentData ? (attachmentData.type === 1 ? 2 : 5) : 1
       }
       
-      console.log('📤 Sending via SignalR:', messagePayload)
       await connection.invoke('SendMessage', messagePayload)
-      console.log('✅ Message sent successfully')
 
     } catch (err) {
       console.error("❌ Send message error:", err)
-      console.error("Error details:", err.response?.data || err.message)
-      alert("Failed to send message: " + (err.response?.data?.message || err.message))
-      // Hata durumunda optimistic mesajı geri al
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.title ||
+                          err.message ||
+                          'Failed to send message'
+      showToast(errorMessage, 'error')
       setMessages(prev => prev.filter(m => !m.id.toString().startsWith('temp-')))
     }
   }
 
   // === AUTH SUCCESS HANDLER ===
   const handleAuthSuccess = (responseData) => {
-    console.log('🔐 Auth success response:', responseData)
-    
-    // Token'ı farklı lokasyonlardan bulmaya çalış
     const receivedToken = responseData.token || 
                           responseData.data?.token || 
                           responseData.accessToken || 
                           responseData.data?.accessToken
     
     if (!receivedToken) {
-      console.error('❌ No token in response')
-      alert("Login successful but no token received")
+      showToast('Login successful but no token received', 'error')
       return
     }
 
-    // User ID'yi farklı lokasyonlardan bulmaya çalış (userId backend'de kullanılıyor)
-    const userId = responseData.userId ||           // ✅ Backend bu kullanıyor
+    const userId = responseData.userId ||
                    responseData.id || 
                    responseData.data?.userId || 
                    responseData.data?.id || 
@@ -404,37 +496,21 @@ function App() {
     const fullName = responseData.fullName || 
                      responseData.data?.fullName || 
                      responseData.user?.fullName ||
-                     userName  // fullName yoksa userName kullan
+                     userName
 
     const email = responseData.email || 
                   responseData.data?.email || 
                   responseData.user?.email
 
-    const userData = {
-      id: userId,
-      userName: userName,
-      fullName: fullName,
-      email: email
-    }
-
-    console.log('👤 Extracted user data:', userData)
+    const userData = { id: userId, userName: userName, fullName: fullName, email: email }
 
     if (!userData.id) {
-      console.error('❌ No user ID in response. Available keys:', Object.keys(responseData))
-      if (responseData.data) {
-        console.error('Data keys:', Object.keys(responseData.data))
-      }
-      alert("Login successful but no user ID received. Please check backend response format.")
+      showToast('Login successful but user data is incomplete', 'error')
       return
     }
 
     localStorage.setItem('token', receivedToken)
     localStorage.setItem('user', JSON.stringify(userData))
-    
-    console.log('✅ Saved to localStorage')
-    console.log('📦 Token:', receivedToken)
-    console.log('📦 User:', JSON.parse(localStorage.getItem('user')))
-    
     setToken(receivedToken)
     setUser(userData)
   }
@@ -444,19 +520,33 @@ function App() {
     e.preventDefault()
     try {
       const { data } = await axios.post(`${API_URL}/auth/login`, loginForm)
-      console.log('🔍 Full login response:', data)
-      console.log('🔍 Response structure:', {
-        hasToken: !!data.token,
-        hasData: !!data.data,
-        hasId: !!data.id,
-        dataHasToken: !!data.data?.token,
-        dataHasId: !!data.data?.id,
-        fullStructure: JSON.stringify(data, null, 2)
-      })
       handleAuthSuccess(data)
+      showToast('Welcome back!', 'success')
     } catch (error) {
-      console.error('Login error:', error)
-      alert('Login failed: ' + (error.response?.data?.message || 'Please try again'))
+      const errorData = error.response?.data
+      let errorMessage = 'Invalid email or password. Please try again.'
+      
+      if (errorData?.error?.message) {
+        errorMessage = errorData.error.message
+      } else if (errorData?.errors) {
+        const allErrors = []
+        Object.entries(errorData.errors).forEach(([field, messages]) => {
+          if (Array.isArray(messages)) {
+            messages.forEach(msg => allErrors.push(msg))
+          } else {
+            allErrors.push(messages)
+          }
+        })
+        if (allErrors.length > 0) {
+          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more error${allErrors.length > 2 ? 's' : ''}`
+        }
+      } else if (errorData?.message) {
+        errorMessage = errorData.message
+      } else if (errorData?.title && errorData.title !== 'One or more validation errors occurred.') {
+        errorMessage = errorData.title
+      }
+      
+      showToast(errorMessage, 'error')
     }
   }
 
@@ -465,19 +555,49 @@ function App() {
     e.preventDefault()
     try {
       const { data } = await axios.post(`${API_URL}/auth/register`, registerForm)
-      console.log('🔍 Full register response:', data)
-      console.log('🔍 Response structure:', {
-        hasToken: !!data.token,
-        hasData: !!data.data,
-        hasId: !!data.id,
-        dataHasToken: !!data.data?.token,
-        dataHasId: !!data.data?.id,
-        fullStructure: JSON.stringify(data, null, 2)
-      })
-      handleAuthSuccess(data)
+      
+      if (!data.token && !data.data?.token && !data.accessToken) {
+        showToast('Account created! Logging you in...', 'success')
+        try {
+          const loginResponse = await axios.post(`${API_URL}/auth/login`, {
+            email: registerForm.email,
+            password: registerForm.password
+          })
+          handleAuthSuccess(loginResponse.data)
+          showToast('Welcome to Chatter!', 'success')
+        } catch (loginError) {
+          showToast('Account created! Please login with your credentials.', 'success')
+          setIsRegistering(false)
+        }
+      } else {
+        handleAuthSuccess(data)
+        showToast('Welcome to Chatter!', 'success')
+      }
     } catch (error) {
-      console.error('Register error:', error)
-      alert('Registration failed: ' + (error.response?.data?.message || 'Please try again'))
+      const errorData = error.response?.data
+      let errorMessage = 'Registration failed. Please try again.'
+      
+      if (errorData?.error?.message) {
+        errorMessage = errorData.error.message
+      } else if (errorData?.errors) {
+        const allErrors = []
+        Object.entries(errorData.errors).forEach(([field, messages]) => {
+          if (Array.isArray(messages)) {
+            messages.forEach(msg => allErrors.push(msg))
+          } else {
+            allErrors.push(messages)
+          }
+        })
+        if (allErrors.length > 0) {
+          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more error${allErrors.length > 2 ? 's' : ''}`
+        }
+      } else if (errorData?.message) {
+        errorMessage = errorData.message
+      } else if (errorData?.title) {
+        errorMessage = errorData.title
+      }
+      
+      showToast(errorMessage, 'error')
     }
   }
 
@@ -489,19 +609,34 @@ function App() {
     setMessages([])
     setSelectedUser(null)
     setUsers([])
-    if (connection) connection.stop()
+    setConnectionStatus('disconnected')
+    if (connection) {
+      connection.stop().catch(err => console.error('Logout connection stop error:', err))
+    }
   }
 
   // === LOGIN/REGISTER SCREEN ===
   if (!token) {
     return (
       <div className="login-container">
+        {toast && (
+          <div className={`toast toast-${toast.type}`}>
+            <div className="toast-icon">
+              {toast.type === 'success' && '✓'}
+              {toast.type === 'error' && '✕'}
+              {toast.type === 'info' && 'ℹ'}
+            </div>
+            <span>{toast.message}</span>
+          </div>
+        )}
+
         <div className="login-box">
           <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
           <form onSubmit={isRegistering ? register : login}>
             {isRegistering ? (
               <>
                 <input 
+                  ref={registerUsernameRef}
                   type="text" 
                   placeholder="Username" 
                   value={registerForm.userName} 
@@ -532,6 +667,7 @@ function App() {
             ) : (
               <>
                 <input 
+                  ref={loginEmailRef}
                   type="email" 
                   placeholder="Email" 
                   value={loginForm.email} 
@@ -560,12 +696,28 @@ function App() {
   // === MAIN CHAT INTERFACE ===
   return (
     <div className="container">
-      {/* SIDEBAR */}
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          <div className="toast-icon">
+            {toast.type === 'success' && '✓'}
+            {toast.type === 'error' && '✕'}
+            {toast.type === 'info' && 'ℹ'}
+          </div>
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       <div className="sidebar">
         <div className="sidebar-header">
           <h3>Chatter</h3>
           <div className="user-profile-summary">
             <small>{user?.fullName || user?.userName}</small>
+            {connectionStatus === 'connecting' && (
+              <span style={{ color: '#f59e0b', fontSize: '0.7rem' }}>● Connecting...</span>
+            )}
+            {connectionStatus === 'failed' && (
+              <span style={{ color: '#ef4444', fontSize: '0.7rem' }}>● Disconnected</span>
+            )}
           </div>
           <button onClick={logout} className="logout-btn">Logout</button>
         </div>
@@ -573,50 +725,43 @@ function App() {
         <div className="user-list">
           {users.length === 0 ? (
             <p style={{ padding: 20, color: '#94a3b8', textAlign: 'center' }}>
-              No users found
+              {connectionStatus === 'connecting' ? 'Loading users...' : 'No users found'}
             </p>
           ) : (
-            users
-              .filter(u => u.id !== user?.id)
-              .map(u => (
-                <div 
-                  key={u.id} 
-                  className={`user-item ${selectedUser?.id === u.id ? 'active' : ''}`}
-                  onClick={() => handleSelectUser(u)}
-                >
-                  <div className="user-avatar">
-                    {(u.fullName?.[0] || u.userName?.[0] || '?').toUpperCase()}
-                  </div>
-                  <div className="user-row">
-                    <div className="user-info">
-                      <span className="user-name">{u.fullName || u.userName}</span>
-                      {u.isOnline && <span className="online-dot" title="Online" />}
-                    </div>
-                    {u.unreadCount > 0 && (
-                      <div className="notification-badge">{u.unreadCount}</div>
-                    )}
-                  </div>
+            users.filter(u => u.id !== user?.id).map(u => (
+              <div 
+                key={u.id} 
+                className={`user-item ${selectedUser?.id === u.id ? 'active' : ''}`}
+                onClick={() => handleSelectUser(u)}
+              >
+                <div className="user-avatar">
+                  {(u.fullName?.[0] || u.userName?.[0] || '?').toUpperCase()}
                 </div>
-              ))
+                <div className="user-row">
+                  <div className="user-info">
+                    <span className="user-name">{u.fullName || u.userName}</span>
+                    {u.isOnline && <span className="online-dot" title="Online" />}
+                  </div>
+                  {u.unreadCount > 0 && (
+                    <div className="notification-badge">{u.unreadCount}</div>
+                  )}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
       
-      {/* CHAT AREA */}
       <div className="chat-area">
         {selectedUser ? (
           <>
-            {/* CHAT HEADER */}
             <div className="chat-header">
               <h3>{selectedUser.fullName || selectedUser.userName}</h3>
               {selectedUser.isOnline && (
-                <span style={{ color: '#10b981', fontSize: '0.8rem', marginLeft: 10 }}>
-                  ● Online
-                </span>
+                <span style={{ color: '#10b981', fontSize: '0.8rem', marginLeft: 10 }}>● Online</span>
               )}
             </div>
             
-            {/* MESSAGES */}
             <div className="messages">
               {messages.map((msg, i) => (
                 <div 
@@ -624,7 +769,6 @@ function App() {
                   className={`message ${msg.senderId === user?.id ? 'sent' : 'received'}`}
                 >
                   <div className="msg-bubble">
-                    {/* ATTACHMENTS */}
                     {msg.attachments?.map(att => (
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 1 ? (
@@ -638,11 +782,11 @@ function App() {
                               objectFit: 'cover',
                               cursor: 'pointer'
                             }}
-                            onClick={() => window.open(`http://localhost:5157${att.fileUrl}`, '_blank')}
+                            onClick={() => window.open(`${API_URL.replace('/api', '')}${att.fileUrl}`, '_blank')}
                           />
                         ) : (
                           <a 
-                            href={`http://localhost:5157${att.fileUrl}`} 
+                            href={`${API_URL.replace('/api', '')}${att.fileUrl}`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="file-attachment"
@@ -652,11 +796,9 @@ function App() {
                         )}
                       </div>
                     ))}
-                    {/* MESSAGE CONTENT */}
                     {msg.content && <p style={{ margin: 0 }}>{msg.content}</p>}
                   </div>
                   
-                  {/* MESSAGE TIME */}
                   <div className="msg-time">
                     {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     {msg.senderId === user?.id && (
@@ -671,10 +813,20 @@ function App() {
                   </div>
                 </div>
               ))}
+
+              {isTyping && (
+                <div className="typing-indicator">
+                  <div className="typing-bubble">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
-            {/* INPUT AREA */}
             <form className="input-area" onSubmit={sendMessage}>
               {selectedFile && (
                 <div className="file-preview">
@@ -708,12 +860,15 @@ function App() {
               </button>
 
               <input 
+                ref={messageInputRef}
                 value={messageInput}
                 onChange={e => setMessageInput(e.target.value)}
                 placeholder="Write a message..."
-                autoFocus
+                disabled={connectionStatus !== 'connected'}
               />
-              <button type="submit">Send</button>
+              <button type="submit" disabled={connectionStatus !== 'connected'}>
+                {connectionStatus === 'connecting' ? '...' : 'Send'}
+              </button>
             </form>
           </>
         ) : (

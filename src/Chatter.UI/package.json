@@ -7,12 +7,13 @@
     "name": "Emin Ates",
     "email": "mhmtmn1800@gmail.com"
   },
-  "homepage": "https://github.com/eminnates/Chatter", 
+  "homepage": "https://github.com/eminnates/Chatter",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "electron:build": "npm run build && electron-builder --win --linux"
+    "electron:build": "npm run build && electron-builder --win --linux",
+    "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
   },
   "build": {
     "appId": "com.chatter.app",
@@ -30,13 +31,19 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "public/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "pacman", "deb"],
+      "target": [
+        "AppImage",
+        "pacman",
+        "deb"
+      ],
       "maintainer": "Emin Ates <mhmtmn1800@gmail.com>",
       "category": "Chat"
     },
@@ -47,6 +54,9 @@
     }
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^8.0.0",
     "@microsoft/signalr": "^8.0.0",
     "axios": "^1.6.0",
     "react": "^18.2.0",
@@ -58,7 +68,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "concurrently": "^8.0.0",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.1", 
+    "electron-builder": "^24.9.1",
     "vite": "^5.0.0",
     "wait-on": "^7.0.0"
   }

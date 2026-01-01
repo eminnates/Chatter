@@ -23,34 +23,53 @@ public class ChatHub : Hub
     {
         var userIdString = Context.UserIdentifier;
         
-        // UserId'yi Guid'e çeviriyoruz
-        if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var userId))
+        if (string.IsNullOrEmpty(userIdString))
         {
-            var connection = new UserConnection
+            Console.WriteLine($"⚠️ Connection attempt without user identifier: {Context.ConnectionId}");
+            await base.OnConnectedAsync();
+            return;
+        }
+        
+        if (Guid.TryParse(userIdString, out var userId))
+        {
+            try
             {
-                // DÜZELTME: userId.ToString() değil, direkt userId (Çünkü Entity'de Guid)
-                UserId = userId, 
-                ConnectionId = Context.ConnectionId,
-                UserAgent = Context.GetHttpContext()?.Request.Headers["User-Agent"].ToString(),
-                IpAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString(),
-                ConnectedAt = DateTime.UtcNow,
-                IsActive = true
-            };
+                var connection = new UserConnection
+                {
+                    UserId = userId, 
+                    ConnectionId = Context.ConnectionId,
+                    UserAgent = Context.GetHttpContext()?.Request.Headers["User-Agent"].ToString(),
+                    IpAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString(),
+                    ConnectedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
 
-            await _unitOfWork.UserConnections.AddAsync(connection);
-            await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.UserConnections.AddAsync(connection);
             
-            // Kullanıcıyı online yap (Repository Guid bekliyor, bu doğru)
+            // Kullanıcı durumunu güncelle
             var user = await _unitOfWork.Users.GetByIdAsync(userId);
             if (user != null)
             {
                 user.SetOnlineStatus(true);
-                await _unitOfWork.SaveChangesAsync();
-                await Clients.All.SendAsync("UserOnline", userId);
             }
 
-            // (Opsiyonel) Kullanıcıyı kendi User ID'si ile bir gruba ekleyebilirsin
-            // await Groups.AddToGroupAsync(Context.ConnectionId, userIdString);
+                // Tek bir SaveChanges ile atomik işlem yapıyoruz
+                await _unitOfWork.SaveChangesAsync();
+                
+                // Diğer kullanıcılara bu kullanıcının online olduğunu bildir
+                await Clients.AllExcept(Context.ConnectionId).SendAsync("UserOnline", userId);
+                
+                Console.WriteLine($"✅ User {userId} connected: {Context.ConnectionId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error in OnConnectedAsync for user {userId}: {ex.Message}");
+                throw;
+            }
+        }
+        else
+        {
+            Console.WriteLine($"⚠️ Invalid user ID format: {userIdString}");
         }
 
         await base.OnConnectedAsync();
@@ -60,21 +79,50 @@ public class ChatHub : Hub
     {
         var userIdString = Context.UserIdentifier;
         
-        if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var userId))
+        if (exception != null)
         {
-            await _unitOfWork.UserConnections.DisconnectAsync(Context.ConnectionId);
-            
-            // Kullanıcıyı offline yap
-            var user = await _unitOfWork.Users.GetByIdAsync(userId);
-            if (user != null)
+            Console.WriteLine($"⚠️ Connection closed with exception for {userIdString}: {exception.Message}");
+        }
+        
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            await base.OnDisconnectedAsync(exception);
+            return;
+        }
+        
+        if (Guid.TryParse(userIdString, out var userId))
+        {
+            try
             {
-                user.SetOnlineStatus(false);
-                user.LastSeenAt = DateTime.UtcNow;
-                await _unitOfWork.SaveChangesAsync();
-                await Clients.All.SendAsync("UserOffline", userId);
-            }
+                // Interface'indeki isme göre güncelledik: DisconnectAsync
+                await _unitOfWork.UserConnections.DisconnectAsync(Context.ConnectionId);
             
-            await _unitOfWork.SaveChangesAsync();
+            // DÜZELTME: Interface'indeki metod ismi GetUserActiveConnectionsAsync
+            var activeConnections = await _unitOfWork.UserConnections.GetUserActiveConnectionsAsync(userId);
+            
+            if (activeConnections == null || !activeConnections.Any())
+            {
+                var user = await _unitOfWork.Users.GetByIdAsync(userId);
+                if (user != null)
+                {
+                    user.SetOnlineStatus(false);
+                    user.LastSeenAt = DateTime.UtcNow;
+                }
+                
+                    await _unitOfWork.SaveChangesAsync();
+                    await Clients.All.SendAsync("UserOffline", userId);
+                    Console.WriteLine($"👋 User {userId} went offline");
+                }
+                else
+                {
+                    await _unitOfWork.SaveChangesAsync();
+                    Console.WriteLine($"🔄 User {userId} still has active connections");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error in OnDisconnectedAsync for user {userId}: {ex.Message}");
+            }
         }
 
         await base.OnDisconnectedAsync(exception);
@@ -82,37 +130,61 @@ public class ChatHub : Hub
 
     public async Task SendMessage(SendMessageRequest request)
     {
-        var userIdString = Context.UserIdentifier;
+        var senderIdString = Context.UserIdentifier;
         
-        // 1. Sender ID'yi Guid'e çevir
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var senderId)) 
+        if (string.IsNullOrEmpty(senderIdString) || !Guid.TryParse(senderIdString, out var senderId)) 
         {
-            await Clients.Caller.SendAsync("ErrorMessage", "Oturum bilgisi geçersiz.");
+            Console.WriteLine($"❌ Invalid sender ID in SendMessage: {senderIdString}");
+            await Clients.Caller.SendAsync("ErrorMessage", "Geçersiz kullanıcı kimliği.");
+            return;
+        }
+        
+        if (request == null || (!request.ReceiverId.HasValue && request.ConversationId == null))
+        {
+            Console.WriteLine($"❌ Invalid message request from {senderId}");
+            await Clients.Caller.SendAsync("ErrorMessage", "Geçersiz mesaj isteği.");
             return;
         }
 
-        // 2. Mesajı Service üzerinden kaydet
         var result = await _chatService.SendMessageAsync(request, senderId);
 
         if (result.IsSuccess)
         {
             var messageDto = result.Value;
 
-            // 3. Alıcıya Mesajı Gönder
-            // SignalR'ın Clients.User metodu STRING ID bekler. Bu yüzden burada ToString() kullanmak DOĞRUDUR.
+            // Alıcıya gönder
             if (request.ReceiverId.HasValue)
             {
                 await Clients.User(request.ReceiverId.Value.ToString()).SendAsync("ReceiveMessage", messageDto);
+                Console.WriteLine($"📤 Message sent from {senderId} to {request.ReceiverId.Value}");
             }
-            // Eğer ReceiverId yoksa ama ConversationId varsa, o conversation'daki diğer kişileri bulup atmak gerekir.
-            // Şimdilik sadece gönderene ve eğer receiverId varsa ona gidiyor.
             
-            // 4. Gönderene Mesajı Geri Gönder (UI'da anında gözükmesi için)
-            await Clients.User(senderId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            // Gönderene gönder (Diğer açık sekmeleri/cihazları varsa senkronize olur)
+            await Clients.User(senderIdString!).SendAsync("ReceiveMessage", messageDto);
         }
         else
         {
-            await Clients.Caller.SendAsync("ErrorMessage", result.Error?.Message ?? "Mesaj gönderilemedi.");
+            Console.WriteLine($"❌ Message send failed from {senderId}: {result.Error?.Message}");
+            await Clients.Caller.SendAsync("ErrorMessage", result.Error?.Message ?? "Mesaj gönderileme hatası.");
+        }
+    }
+    public async Task NotifyTyping(Guid receiverId)
+    {
+        var senderId = Context.UserIdentifier;
+        
+        if (!string.IsNullOrEmpty(senderId))
+        {
+            // SignalR .User() metodu string istediği için burada çeviriyoruz
+            await Clients.User(receiverId.ToString()).SendAsync("UserTyping", senderId);
+        }
+    }
+     public async Task NotifyStoppedTyping(Guid receiverId)
+    {
+        var senderId = Context.UserIdentifier;
+        
+        if (!string.IsNullOrEmpty(senderId))
+        {
+            await Clients.User(receiverId.ToString()).SendAsync("UserStoppedTyping", senderId);
         }
     }
 }
