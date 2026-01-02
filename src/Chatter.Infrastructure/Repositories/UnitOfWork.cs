@@ -20,6 +20,7 @@ public class UnitOfWork : IUnitOfWork
     private IMessageRepository? _messages;
     private IRefreshTokenRepository? _refreshTokens;
     private IUserConnectionRepository? _userConnections;
+    private ICallRepository? _calls;
 
     // UserManager'ı da constructor'a ekledik
     public UnitOfWork(ChatterDbContext context, UserManager<AppUser> userManager)
@@ -71,6 +72,15 @@ public class UnitOfWork : IUnitOfWork
         {
             _userConnections ??= new UserConnectionRepository(_context);
             return _userConnections;
+        }
+    }
+
+    public ICallRepository Calls
+    {
+        get
+        {
+            _calls ??= new CallRepository(_context);
+            return _calls;
         }
     }
 

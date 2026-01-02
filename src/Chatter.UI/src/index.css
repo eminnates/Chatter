@@ -249,6 +249,42 @@ body {
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
+  gap: 15px;
+}
+
+.call-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--accent-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+  background: var(--accent-primary);
+}
+
+.call-btn.audio-call:hover:not(:disabled) {
+  background: #10b981;
+}
+
+.call-btn.video-call:hover:not(:disabled) {
+  background: #3b82f6;
+}
+
+.call-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(50%);
+}
+  align-items: center;
   gap: 12px;
   backdrop-filter: blur(10px);
   box-shadow: var(--shadow-sm);
@@ -336,6 +372,48 @@ body {
 
 .message.received .msg-time {
   align-self: flex-start;
+}
+
+/* === SYSTEM MESSAGES (Call History) === */
+.system-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 16px 0;
+  gap: 4px;
+}
+
+.system-message-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Red variant for declined/missed calls */
+.system-message-content.negative {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.system-message-content .call-icon {
+  font-size: 1rem;
+}
+
+.system-message-content .call-text {
+  font-weight: 500;
+}
+
+.system-message-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .file-attachment {

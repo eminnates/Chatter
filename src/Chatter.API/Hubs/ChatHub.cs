@@ -11,11 +11,13 @@ namespace Chatter.API.Hubs;
 public class ChatHub : Hub
 {
     private readonly IChatService _chatService;
+    private readonly ICallService _callService;
     private readonly IUnitOfWork _unitOfWork;
 
-    public ChatHub(IChatService chatService, IUnitOfWork unitOfWork)
+    public ChatHub(IChatService chatService, ICallService callService, IUnitOfWork unitOfWork)
     {
         _chatService = chatService;
+        _callService = callService;
         _unitOfWork = unitOfWork;
     }
 
@@ -186,5 +188,316 @@ public class ChatHub : Hub
         {
             await Clients.User(receiverId.ToString()).SendAsync("UserStoppedTyping", senderId);
         }
+    }
+
+    // ==================== CALL METHODS ====================
+
+    public async Task InitiateCall(Guid receiverId, int callType)
+    {
+        var initiatorIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(initiatorIdString) || !Guid.TryParse(initiatorIdString, out var initiatorId))
+        {
+            Console.WriteLine($"❌ Invalid initiator ID in InitiateCall: {initiatorIdString}");
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var request = new InitiateCallRequest
+        {
+            ReceiverId = receiverId,
+            Type = (Domain.Enums.CallType)callType
+        };
+
+        var result = await _callService.InitiateCallAsync(request, initiatorId);
+
+        if (result.IsSuccess)
+        {
+            var callDto = result.Value;
+            
+            // Notify receiver about incoming call
+            await Clients.User(receiverId.ToString()).SendAsync("IncomingCall", callDto);
+            
+            // Confirm to initiator
+            await Clients.Caller.SendAsync("CallInitiated", callDto);
+            
+            Console.WriteLine($"📞 Call initiated from {initiatorId} to {receiverId} (Type: {callType})");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Call initiation failed: {result.Error?.Message}");
+            await Clients.Caller.SendAsync("CallError", result.Error?.Message ?? "Failed to initiate call.");
+        }
+    }
+
+    public async Task AcceptCall(Guid callId)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var result = await _callService.AcceptCallAsync(callId, userId);
+
+        if (result.IsSuccess)
+        {
+            var callDto = result.Value;
+            
+            // Notify all participants that call was accepted
+            foreach (var participantId in callDto.ParticipantIds)
+            {
+                await Clients.User(participantId.ToString()).SendAsync("CallAccepted", callDto);
+            }
+            
+            Console.WriteLine($"✅ Call {callId} accepted by {userId}");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Call accept failed: {result.Error?.Message}");
+            await Clients.Caller.SendAsync("CallError", result.Error?.Message ?? "Failed to accept call.");
+        }
+    }
+
+    public async Task DeclineCall(Guid callId)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var result = await _callService.DeclineCallAsync(callId, userId);
+
+        if (result.IsSuccess)
+        {
+            var callDto = result.Value;
+            
+            // Notify all participants that call was declined
+            foreach (var participantId in callDto.ParticipantIds)
+            {
+                await Clients.User(participantId.ToString()).SendAsync("CallDeclined", callDto);
+            }
+            
+            // Create a system message for declined call
+            var callTypeText = callDto.Type == Domain.Enums.CallType.Video ? "Video call" : "Voice call";
+            var declinerName = callDto.InitiatorId == userId ? "You" : "User";
+            
+            var systemMessage = new Domain.Entities.Message
+            {
+                ConversationId = callDto.ConversationId,
+                SenderId = userId,
+                Content = $"{callTypeText} declined",
+                Type = Domain.Enums.MessageType.System,
+                Status = Domain.Enums.MessageStatus.Sent,
+                SentAt = DateTime.UtcNow
+            };
+            
+            await _unitOfWork.Messages.AddAsync(systemMessage);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Broadcast the declined message to all participants
+            var messageDto = new Application.DTOs.Chat.MessageDto
+            {
+                Id = systemMessage.Id,
+                ConversationId = systemMessage.ConversationId,
+                SenderId = systemMessage.SenderId,
+                SenderName = "System",
+                Content = systemMessage.Content,
+                Type = systemMessage.Type.ToString(),
+                SentAt = systemMessage.SentAt,
+                IsRead = false
+            };
+            
+            foreach (var participantId in callDto.ParticipantIds)
+            {
+                await Clients.User(participantId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            }
+            
+            Console.WriteLine($"❌ Call {callId} declined by {userId}");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Call decline failed: {result.Error?.Message}");
+            await Clients.Caller.SendAsync("CallError", result.Error?.Message ?? "Failed to decline call.");
+        }
+    }
+
+    public async Task EndCall(Guid callId)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var result = await _callService.EndCallAsync(callId, userId);
+
+        if (result.IsSuccess)
+        {
+            var callDto = result.Value;
+            
+            // Notify all participants that call ended
+            foreach (var participantId in callDto.ParticipantIds)
+            {
+                await Clients.User(participantId.ToString()).SendAsync("CallEnded", callDto);
+            }
+            
+            // Create a system message for call history
+            if (callDto.Status == Domain.Enums.CallStatus.Ended && callDto.DurationInSeconds.HasValue)
+            {
+                var callTypeText = callDto.Type == Domain.Enums.CallType.Video ? "Video call" : "Voice call";
+                var durationMinutes = callDto.DurationInSeconds.Value / 60;
+                var durationSeconds = callDto.DurationInSeconds.Value % 60;
+                var durationText = durationMinutes > 0 
+                    ? $"{durationMinutes}m {durationSeconds}s" 
+                    : $"{durationSeconds}s";
+                
+                var systemMessage = new Domain.Entities.Message
+                {
+                    ConversationId = callDto.ConversationId,
+                    SenderId = userId,
+                    Content = $"{callTypeText} • {durationText}",
+                    Type = Domain.Enums.MessageType.System,
+                    Status = Domain.Enums.MessageStatus.Sent,
+                    SentAt = DateTime.UtcNow
+                };
+                
+                await _unitOfWork.Messages.AddAsync(systemMessage);
+                await _unitOfWork.SaveChangesAsync();
+                
+                // Broadcast the call history message to all participants
+                var messageDto = new Application.DTOs.Chat.MessageDto
+                {
+                    Id = systemMessage.Id,
+                    ConversationId = systemMessage.ConversationId,
+                    SenderId = systemMessage.SenderId,
+                    SenderName = "System",
+                    Content = systemMessage.Content,
+                    Type = systemMessage.Type.ToString(),
+                    SentAt = systemMessage.SentAt,
+                    IsRead = false
+                };
+                
+                foreach (var participantId in callDto.ParticipantIds)
+                {
+                    await Clients.User(participantId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                }
+            }
+            
+            Console.WriteLine($"📴 Call {callId} ended by {userId}");
+        }
+        else
+        {
+            Console.WriteLine($"❌ Call end failed: {result.Error?.Message}");
+            await Clients.Caller.SendAsync("CallError", result.Error?.Message ?? "Failed to end call.");
+        }
+    }
+
+    public async Task SendWebRTCOffer(Guid callId, string sdp)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var callResult = await _callService.GetCallByIdAsync(callId);
+        if (!callResult.IsSuccess || callResult.Value == null)
+        {
+            await Clients.Caller.SendAsync("CallError", "Call not found.");
+            return;
+        }
+
+        var callDto = callResult.Value;
+        var signalDto = new WebRTCSignalDto
+        {
+            CallId = callId,
+            Sdp = sdp
+        };
+
+        // Send offer to other participants (exclude sender)
+        foreach (var participantId in callDto.ParticipantIds.Where(id => id != userId))
+        {
+            await Clients.User(participantId.ToString()).SendAsync("ReceiveOffer", signalDto);
+        }
+        
+        Console.WriteLine($"📡 WebRTC offer sent for call {callId}");
+    }
+
+    public async Task SendWebRTCAnswer(Guid callId, string sdp)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var callResult = await _callService.GetCallByIdAsync(callId);
+        if (!callResult.IsSuccess || callResult.Value == null)
+        {
+            await Clients.Caller.SendAsync("CallError", "Call not found.");
+            return;
+        }
+
+        var callDto = callResult.Value;
+        var signalDto = new WebRTCSignalDto
+        {
+            CallId = callId,
+            Sdp = sdp
+        };
+
+        // Send answer to other participants (exclude sender)
+        foreach (var participantId in callDto.ParticipantIds.Where(id => id != userId))
+        {
+            await Clients.User(participantId.ToString()).SendAsync("ReceiveAnswer", signalDto);
+        }
+        
+        Console.WriteLine($"📡 WebRTC answer sent for call {callId}");
+    }
+
+    public async Task SendICECandidate(Guid callId, string candidate, string? sdpMid, int? sdpMLineIndex)
+    {
+        var userIdString = Context.UserIdentifier;
+        
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("CallError", "Invalid user identifier.");
+            return;
+        }
+
+        var callResult = await _callService.GetCallByIdAsync(callId);
+        if (!callResult.IsSuccess || callResult.Value == null)
+        {
+            await Clients.Caller.SendAsync("CallError", "Call not found.");
+            return;
+        }
+
+        var callDto = callResult.Value;
+        var signalDto = new WebRTCSignalDto
+        {
+            CallId = callId,
+            Candidate = candidate,
+            SdpMid = sdpMid,
+            SdpMLineIndex = sdpMLineIndex
+        };
+
+        // Send ICE candidate to other participants (exclude sender)
+        foreach (var participantId in callDto.ParticipantIds.Where(id => id != userId))
+        {
+            await Clients.User(participantId.ToString()).SendAsync("ReceiveICECandidate", signalDto);
+        }
+        
+        Console.WriteLine($"📡 ICE candidate sent for call {callId}");
     }
 }

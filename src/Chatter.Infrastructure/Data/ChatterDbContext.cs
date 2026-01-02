@@ -26,6 +26,9 @@ public class ChatterDbContext : IdentityDbContext<AppUser, AppRole, Guid>
     public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
 
+    // Calls
+    public DbSet<Call> Calls => Set<Call>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

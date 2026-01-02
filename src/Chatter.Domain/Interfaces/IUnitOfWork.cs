@@ -12,6 +12,7 @@ namespace Chatter.Domain.Interfaces
         IMessageRepository Messages { get; }
         IRefreshTokenRepository RefreshTokens { get; }
         IUserConnectionRepository UserConnections { get; }
+        ICallRepository Calls { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task<bool> SaveChangesWithResultAsync(CancellationToken cancellationToken = default);

@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import * as signalR from '@microsoft/signalr'
 import axios from 'axios'
 import './index.css'
+import { useWebRTC } from './hooks/useWebRTC'
+import IncomingCallModal from './components/IncomingCallModal'
+import ActiveCallScreen from './components/ActiveCallScreen'
 
 const API_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/api';
 const HUB_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/hubs/chat';
@@ -57,6 +60,35 @@ function App() {
     }
     setToast({ message: displayMessage, type })
   }, [])
+
+  // === WEBRTC HOOK ===
+  const {
+    localStream,
+    remoteStream,
+    callStatus,
+    activeCall,
+    initiateCall,
+    acceptCall,
+    declineCall,
+    endCall,
+    toggleAudio,
+    toggleVideo
+  } = useWebRTC(connection, user?.id, showToast)
+
+  // === CALL HANDLERS ===
+  const handleInitiateCall = useCallback((receiverId, callType) => {
+    // Prevent calling yourself
+    if (receiverId === user?.id) {
+      showToast('You cannot call yourself.', 'error')
+      return
+    }
+    
+    if (activeCall && (callStatus === 'active' || callStatus === 'ringing')) {
+      showToast('You are already in an active call.', 'error')
+      return
+    }
+    initiateCall(receiverId, callType)
+  }, [activeCall, callStatus, initiateCall, showToast, user?.id])
 
   // === SYNC SELECTED USER REF ===
   useEffect(() => {
@@ -181,10 +213,16 @@ function App() {
         .withUrl(HUB_URL, { 
           accessTokenFactory: () => token,
           transport: signalR.HttpTransportType.WebSockets,
-          headers: { "ngrok-skip-browser-warning": "true" } 
+          headers: { "ngrok-skip-browser-warning": "true" },
+          skipNegotiation: true
         })
-        .withAutomaticReconnect()
+        .withAutomaticReconnect([0, 2000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Information)
         .build()
+
+      // Set keep-alive interval
+      newConnection.keepAliveIntervalInMilliseconds = 15000 // 15 seconds
+      newConnection.serverTimeoutInMilliseconds = 30000 // 30 seconds
 
       try {
         await newConnection.start()
@@ -760,15 +798,56 @@ function App() {
               {selectedUser.isOnline && (
                 <span style={{ color: '#10b981', fontSize: '0.8rem', marginLeft: 10 }}>● Online</span>
               )}
+              <div className="call-buttons" style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+                <button 
+                  className="call-btn audio-call"
+                  onClick={() => handleInitiateCall(selectedUser.id, 1)}
+                  title="Voice Call"
+                  disabled={callStatus === 'active' || callStatus === 'ringing'}
+                >
+                  📞
+                </button>
+                <button 
+                  className="call-btn video-call"
+                  onClick={() => handleInitiateCall(selectedUser.id, 2)}
+                  title="Video Call"
+                  disabled={callStatus === 'active' || callStatus === 'ringing'}
+                >
+                  📹
+                </button>
+              </div>
             </div>
             
             <div className="messages">
-              {messages.map((msg, i) => (
-                <div 
-                  key={msg.id || i} 
-                  className={`message ${msg.senderId === user?.id ? 'sent' : 'received'}`}
-                >
-                  <div className="msg-bubble">
+              {messages.map((msg, i) => {
+                // System message (call history)
+                if (msg.type === 'System') {
+                  const isDeclined = msg.content.includes('declined');
+                  const isMissed = msg.content.includes('Missed');
+                  const isNegative = isDeclined || isMissed;
+                  
+                  return (
+                    <div key={msg.id || i} className="system-message">
+                      <div className={`system-message-content ${isNegative ? 'negative' : ''}`}>
+                        <span className="call-icon">
+                          {msg.content.includes('Video') ? '📹' : '📞'}
+                        </span>
+                        <span className="call-text">{msg.content}</span>
+                      </div>
+                      <div className="system-message-time">
+                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // Regular message
+                return (
+                  <div 
+                    key={msg.id || i} 
+                    className={`message ${msg.senderId === user?.id ? 'sent' : 'received'}`}
+                  >
+                    <div className="msg-bubble">
                     {msg.attachments?.map(att => (
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 1 ? (
@@ -812,7 +891,8 @@ function App() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {isTyping && (
                 <div className="typing-indicator">
@@ -880,6 +960,47 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Incoming Call Modal - for receiver */}
+      {callStatus === 'ringing' && activeCall && activeCall.initiatorId !== user?.id && (
+        <IncomingCallModal 
+          call={activeCall}
+          onAccept={acceptCall}
+          onDecline={declineCall}
+        />
+      )}
+
+      {/* Outgoing Call Screen - for initiator */}
+      {callStatus === 'ringing' && activeCall && activeCall.initiatorId === user?.id && (
+        <div className="incoming-call-overlay">
+          <div className="incoming-call-modal">
+            <div className="call-icon">{activeCall.type === 2 ? '📹' : '📞'}</div>
+            <h2>Calling...</h2>
+            <p className="caller-name">
+              {users.find(u => activeCall.participantIds?.find(id => id !== user?.id) === u.id)?.fullName || 'User'}
+            </p>
+            <div className="call-buttons">
+              <button className="decline-button" onClick={endCall}>
+                ❌ Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Call Screen */}
+      {callStatus === 'active' && (
+        <ActiveCallScreen 
+          localStream={localStream}
+          remoteStream={remoteStream}
+          activeCall={activeCall}
+          currentUserId={user?.id}
+          allUsers={users}
+          onEndCall={endCall}
+          onToggleAudio={toggleAudio}
+          onToggleVideo={toggleVideo}
+        />
+      )}
     </div>
   )
 }
