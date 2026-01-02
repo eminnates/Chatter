@@ -147,6 +147,7 @@ public class ChatService : IChatService
             SenderId = m.SenderId,
             SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? "Unknown",
             Content = m.Content,
+            Type = m.Type.ToString(),
             SentAt = m.SentAt,
             IsRead = m.Status == MessageStatus.Read,
             // DÜZELTME (HATA 2): .ToString() kaldırıldı

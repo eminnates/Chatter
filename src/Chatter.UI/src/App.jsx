@@ -46,6 +46,7 @@ function App() {
   // === REFS ===
   const selectedUserRef = useRef(null) 
   const userRef = useRef(user)
+  const usersRef = useRef(users)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const messageInputRef = useRef(null)
@@ -61,6 +62,43 @@ function App() {
     setToast({ message: displayMessage, type })
   }, [])
 
+  // === NOTIFICATION FUNCTIONS ===
+  const requestNotificationPermission = useCallback(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  const showNotification = useCallback((title, body, icon) => {
+    // Check if notifications are supported and permitted
+    if (!('Notification' in window)) return
+    
+    if (Notification.permission === 'granted') {
+      const notification = new Notification(title, {
+        body,
+        icon: icon || '/icon.png',
+        badge: '/icon.png',
+        tag: 'chatter-notification',
+        requireInteraction: false
+      })
+      
+      notification.onclick = () => {
+        window.focus()
+        notification.close()
+      }
+      
+      // Auto close after 5 seconds
+      setTimeout(() => notification.close(), 5000)
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission()
+  }, [requestNotificationPermission])
+
   // === WEBRTC HOOK ===
   const {
     localStream,
@@ -73,7 +111,7 @@ function App() {
     endCall,
     toggleAudio,
     toggleVideo
-  } = useWebRTC(connection, user?.id, showToast)
+  } = useWebRTC(connection, user?.id, showToast, showNotification)
 
   // === CALL HANDLERS ===
   const handleInitiateCall = useCallback((receiverId, callType) => {
@@ -95,8 +133,11 @@ function App() {
     selectedUserRef.current = selectedUser
   }, [selectedUser])
   useEffect(() => {
-  userRef.current = user // User değiştikçe Ref'i güncelle
+    userRef.current = user // User değiştikçe Ref'i güncelle
   }, [user])
+  useEffect(() => {
+    usersRef.current = users // Users değiştikçe Ref'i güncelle
+  }, [users])
 
   // === AUTO SCROLL ===
   useEffect(() => {
@@ -276,6 +317,20 @@ function App() {
           if (isFromSelectedUser && !isMyMessage) {
             markAsRead(senderId);
             setIsTyping(false);
+          }
+        }
+        
+        // Show notification for incoming messages (not from me)
+        if (!isMyMessage) {
+          // Show notification if:
+          // 1. Message is from a different chat (not selected user)
+          // 2. Message is from selected user BUT window is not focused
+          if (!isFromSelectedUser || !document.hasFocus()) {
+            // Find sender name from users list using ref for most up-to-date data
+            const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
+            const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
+            const messagePreview = message.content?.substring(0, 50) || 'New message';
+            showNotification(senderName, messagePreview);
           }
         }
 
@@ -850,7 +905,7 @@ function App() {
                     <div className="msg-bubble">
                     {msg.attachments?.map(att => (
                       <div key={att.id} style={{ marginBottom: 10 }}>
-                        {att.type === 1 ? (
+                        {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
                           <img 
                             src={`${API_URL.replace('/api', '')}${att.fileUrl}`} 
                             alt={att.fileName}

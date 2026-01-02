@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Peer from 'simple-peer';
 
-export const useWebRTC = (connection, currentUserId, showToast) => {
+export const useWebRTC = (connection, currentUserId, showToast, showNotification) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [callStatus, setCallStatus] = useState('idle'); // idle, initiating, ringing, active, ended
@@ -247,6 +247,13 @@ export const useWebRTC = (connection, currentUserId, showToast) => {
       console.log('Incoming call:', call);
       setActiveCall(call);
       setCallStatus('ringing');
+      
+      // Show notification
+      if (showNotification) {
+        const callType = call.type === 2 ? 'Video' : 'Voice';
+        const callerName = call.initiatorFullName || call.initiatorUsername || 'Someone';
+        showNotification(`Incoming ${callType} Call`, `${callerName} is calling...`, '📞');
+      }
     };
 
     // Call accepted
