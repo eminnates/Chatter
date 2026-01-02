@@ -724,6 +724,9 @@ function App() {
         )}
 
         <div className="login-box">
+          <div className="login-logo">
+            <img src="/logo.png" alt="Chatter Logo" />
+          </div>
           <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
           <form onSubmit={isRegistering ? register : login}>
             {isRegistering ? (

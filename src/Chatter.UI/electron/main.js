@@ -9,6 +9,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -53,8 +54,8 @@ function createWindow() {
 }
 
 function createTray() {
-  // Create tray icon (using a simple icon, you can replace with your own)
-  const iconPath = path.join(__dirname, '../public/icon.png');
+  // Create tray icon
+  const iconPath = path.join(__dirname, '../public/icon-tray.png');
   let trayIcon;
   
   try {
