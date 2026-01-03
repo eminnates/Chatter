@@ -10,6 +10,8 @@ import {
   CheckCircle2, XCircle, Info, Phone, Video, 
   Check, CheckCheck, Paperclip, X, File, LogOut, User, Menu 
 } from 'lucide-react'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 
 // === HARDCODED BACKEND CONFIG ===
 const BACKEND_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev'
@@ -111,6 +113,60 @@ function App() {
   useEffect(() => {
     requestNotificationPermission()
   }, [requestNotificationPermission])
+
+  // === CAPACITOR APP LIFECYCLE - Handle background/foreground state ===
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    const handleAppStateChange = CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+      console.log(`📱 App state changed: ${isActive ? 'foreground' : 'background'}`)
+      
+      if (!isActive && connection && connection.state === signalR.HubConnectionState.Connected) {
+        // App went to background - notify server user is going offline
+        try {
+          await connection.invoke('SetUserOffline')
+          console.log('👋 Sent offline status to server')
+        } catch (err) {
+          console.error('Error sending offline status:', err)
+        }
+      } else if (isActive && connection) {
+        // App came to foreground - reconnect if needed
+        if (connection.state !== signalR.HubConnectionState.Connected) {
+          try {
+            await connection.start()
+            console.log('✅ Reconnected to SignalR')
+            setConnectionStatus('connected')
+          } catch (err) {
+            console.error('Error reconnecting:', err)
+          }
+        } else {
+          // Already connected, just notify server we're back online
+          try {
+            await connection.invoke('SetUserOnline')
+            console.log('👋 Sent online status to server')
+          } catch (err) {
+            console.error('Error sending online status:', err)
+          }
+        }
+        // Refresh users list inline
+        if (token) {
+          try {
+            const { data } = await axios.get(`${API_URL}/user`, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+            const userList = Array.isArray(data) ? data : (data.data || [])
+            setUsers(userList)
+          } catch (err) {
+            console.error('Error refreshing users:', err)
+          }
+        }
+      }
+    })
+
+    return () => {
+      handleAppStateChange.remove()
+    }
+  }, [connection, token])
 
   // Detect mobile screen size
   useEffect(() => {
@@ -730,7 +786,24 @@ function App() {
   }
 
   // === LOGOUT ===
-  const logout = () => {
+  const logout = async () => {
+    // First notify server that user is going offline
+    if (connection && connection.state === signalR.HubConnectionState.Connected) {
+      try {
+        await connection.invoke('SetUserOffline')
+        console.log('✅ SetUserOffline called before logout')
+      } catch (err) {
+        console.error('SetUserOffline error:', err)
+      }
+      
+      try {
+        await connection.stop()
+        console.log('✅ Connection stopped')
+      } catch (err) {
+        console.error('Logout connection stop error:', err)
+      }
+    }
+    
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     
@@ -740,10 +813,7 @@ function App() {
     setSelectedUser(null)
     setUsers([])
     setConnectionStatus('disconnected')
-    
-    if (connection) {
-      connection.stop().catch(err => console.error('Logout connection stop error:', err))
-    }
+    setConnection(null)
   }
 
   // === LOGIN/REGISTER SCREEN ===

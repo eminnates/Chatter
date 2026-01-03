@@ -139,6 +139,69 @@ public class ChatHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
+    /// <summary>
+    /// Manually set user offline (e.g., when app goes to background on mobile)
+    /// </summary>
+    public async Task SetUserOffline()
+    {
+        var userIdString = Context.UserIdentifier;
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+            return;
+
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (user != null)
+            {
+                user.SetOnlineStatus(false);
+                user.LastSeenAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync();
+                
+                // End any active calls
+                var endedCalls = await _callService.ForceEndUserCallsAsync(userId);
+                if (endedCalls.IsSuccess && endedCalls.Value > 0)
+                {
+                    Console.WriteLine($"🔴 Force ended {endedCalls.Value} call(s) for backgrounded user {userId}");
+                    await Clients.All.SendAsync("CallEnded", new { userId, reason = "UserBackgrounded" });
+                }
+                
+                await Clients.AllExcept(Context.ConnectionId).SendAsync("UserOffline", userId);
+                Console.WriteLine($"📱 User {userId} manually set offline (app backgrounded)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error in SetUserOffline for user {userId}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Manually set user online (e.g., when app comes to foreground on mobile)
+    /// </summary>
+    public async Task SetUserOnline()
+    {
+        var userIdString = Context.UserIdentifier;
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+            return;
+
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (user != null)
+            {
+                user.SetOnlineStatus(true);
+                await _unitOfWork.SaveChangesAsync();
+                
+                await Clients.AllExcept(Context.ConnectionId).SendAsync("UserOnline", userId);
+                Console.WriteLine($"📱 User {userId} manually set online (app foregrounded)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error in SetUserOnline for user {userId}: {ex.Message}");
+        }
+    }
+
     public async Task SendMessage(SendMessageRequest request)
     {
         var senderIdString = Context.UserIdentifier;
