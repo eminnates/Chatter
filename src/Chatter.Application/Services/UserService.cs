@@ -184,4 +184,30 @@ public class UserService : IUserService
             return Result<UserProfileResponse>.Failure(new Error("User.ProfileUpdateFailed", $"Profil güncellenirken hata oluştu: {ex.Message}"));
         }
     }
+
+    public async Task<Result<bool>> UpdateFcmTokenAsync(Guid userId, string fcmToken)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return Result<bool>.Failure(new Error("User.NotFound", "Kullanıcı bulunamadı."));
+            }
+
+            user.FcmToken = fcmToken;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            Console.WriteLine($"📱 FCM token updated for user {userId}");
+            return Result<bool>.Success(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Failure(new Error("User.FcmTokenUpdateFailed", $"FCM token güncellenirken hata oluştu: {ex.Message}"));
+        }
+    }
 }

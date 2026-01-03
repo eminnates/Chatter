@@ -14,6 +14,9 @@ namespace Chatter.Domain.Entities
         // ====== Online Status ======
         public bool IsOnline { get; set; }
         public DateTime? LastSeenAt { get; set; }
+        
+        // ====== Push Notifications ======
+        public string? FcmToken { get; set; }
 
         // ====== Hesap Durumu ======
         public bool IsActive { get; set; } = true;

@@ -13,12 +13,14 @@ public class ChatHub : Hub
     private readonly IChatService _chatService;
     private readonly ICallService _callService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPushNotificationService _pushNotificationService;
 
-    public ChatHub(IChatService chatService, ICallService callService, IUnitOfWork unitOfWork)
+    public ChatHub(IChatService chatService, ICallService callService, IUnitOfWork unitOfWork, IPushNotificationService pushNotificationService)
     {
         _chatService = chatService;
         _callService = callService;
         _unitOfWork = unitOfWork;
+        _pushNotificationService = pushNotificationService;
     }
 
     public override async Task OnConnectedAsync()
@@ -231,6 +233,32 @@ public class ChatHub : Hub
             {
                 await Clients.User(request.ReceiverId.Value.ToString()).SendAsync("ReceiveMessage", messageDto);
                 Console.WriteLine($"📤 Message sent from {senderId} to {request.ReceiverId.Value}");
+                
+                // Send push notification to receiver (for background/offline users)
+                try
+                {
+                    var sender = await _unitOfWork.Users.GetByIdAsync(senderId);
+                    var senderName = sender?.FullName ?? sender?.UserName ?? "Someone";
+                    var messagePreview = messageDto.Content?.Length > 50 
+                        ? messageDto.Content.Substring(0, 50) + "..." 
+                        : messageDto.Content ?? "New message";
+                    
+                    await _pushNotificationService.SendPushNotificationToUserAsync(
+                        request.ReceiverId.Value,
+                        senderName,
+                        messagePreview,
+                        new Dictionary<string, string>
+                        {
+                            { "type", "message" },
+                            { "senderId", senderId.ToString() },
+                            { "conversationId", messageDto.ConversationId.ToString() }
+                        }
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Push notification failed: {ex.Message}");
+                }
             }
             
             // Gönderene gönder (Diğer açık sekmeleri/cihazları varsa senkronize olur)

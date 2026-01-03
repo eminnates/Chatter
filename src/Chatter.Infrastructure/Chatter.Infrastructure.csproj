@@ -8,9 +8,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Chatter.Domain\Chatter.Domain.csproj" />
+    <ProjectReference Include="..\Chatter.Application\Chatter.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FirebaseAdmin" Version="3.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">

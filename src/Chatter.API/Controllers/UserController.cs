@@ -82,4 +82,23 @@ public class UserController : BaseApiController // ControllerBase yerine BaseApi
         var result = await _userService.GetUserProfileAsync(parsedUserId);
         return HandleResult(result);
     }
+
+    [HttpPost("fcm-token")]
+    public async Task<IActionResult> UpdateFcmToken([FromBody] FcmTokenRequest request)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return BadRequest(new { error = new { Code = "Auth.InvalidToken", Message = "Geçersiz token." } });
+        }
+
+        var result = await _userService.UpdateFcmTokenAsync(userId, request.Token);
+        return HandleResult(result);
+    }
+}
+
+public class FcmTokenRequest
+{
+    public string Token { get; set; } = string.Empty;
 }

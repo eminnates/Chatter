@@ -2,6 +2,8 @@ using Chatter.Domain.Entities;
 using Chatter.Domain.Interfaces;
 using Chatter.Infrastructure.Data;
 using Chatter.Infrastructure.Repositories;
+using Chatter.Infrastructure.Services;
+using Chatter.Application.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -51,6 +53,9 @@ public static class DependencyInjection
 
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        
+        // Services
+        services.AddScoped<IPushNotificationService, PushNotificationService>();
 
         return services;
     }

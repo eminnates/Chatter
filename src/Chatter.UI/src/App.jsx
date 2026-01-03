@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
+import { LocalNotifications } from '@capacitor/local-notifications'
+import { PushNotifications } from '@capacitor/push-notifications'
 
 // === HARDCODED BACKEND CONFIG ===
 const BACKEND_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev'
@@ -47,6 +49,7 @@ function App() {
   const [viewProfileUserId, setViewProfileUserId] = useState(null)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  const [isAppActive, setIsAppActive] = useState(true) // Track if app is in foreground
   
   // === LOGIN & REGISTER STATES ===
   const [isRegistering, setIsRegistering] = useState(false)
@@ -62,6 +65,7 @@ function App() {
   const selectedUserRef = useRef(null) 
   const userRef = useRef(user)
   const usersRef = useRef(users)
+  const isAppActiveRef = useRef(true)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const messageInputRef = useRef(null)
@@ -78,41 +82,165 @@ function App() {
   }, [])
 
   // === NOTIFICATION FUNCTIONS ===
-  const requestNotificationPermission = useCallback(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission()
-    }
-  }, [])
-
-  const showNotification = useCallback((title, body, icon) => {
-    // Check if notifications are supported and permitted
-    if (!('Notification' in window)) return
-    
-    if (Notification.permission === 'granted') {
-      const notification = new Notification(title, {
-        body,
-        icon: icon || '/icon.png',
-        badge: '/icon.png',
-        tag: 'chatter-notification',
-        requireInteraction: false
-      })
-      
-      notification.onclick = () => {
-        window.focus()
-        notification.close()
+  const requestNotificationPermission = useCallback(async () => {
+    if (Capacitor.isNativePlatform()) {
+      // Mobile: Request local notification permission
+      try {
+        const result = await LocalNotifications.requestPermissions()
+        console.log('📱 Mobile notification permission:', result.display)
+      } catch (err) {
+        console.error('Mobile notification permission error:', err)
       }
-      
-      // Auto close after 5 seconds
-      setTimeout(() => notification.close(), 5000)
-    } else if (Notification.permission === 'default') {
-      Notification.requestPermission()
+    } else {
+      // Web: Request browser notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission()
+      }
     }
   }, [])
 
-  // Request notification permission on mount
+  const showNotification = useCallback(async (title, body, icon) => {
+    if (Capacitor.isNativePlatform()) {
+      // Mobile: Use Capacitor Local Notifications
+      try {
+        // Check permission first
+        const permResult = await LocalNotifications.checkPermissions()
+        console.log('📱 Notification permission status:', permResult.display)
+        
+        if (permResult.display !== 'granted') {
+          const requestResult = await LocalNotifications.requestPermissions()
+          console.log('📱 Permission request result:', requestResult.display)
+          if (requestResult.display !== 'granted') {
+            console.log('📱 Notification permission denied')
+            return
+          }
+        }
+        
+        // Schedule immediate notification
+        const notificationId = Math.floor(Math.random() * 2147483647)
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: notificationId,
+              title: title,
+              body: body,
+              sound: 'default',
+              channelId: 'chatter-messages',
+              autoCancel: true
+            }
+          ]
+        })
+        console.log('📱 Mobile notification scheduled:', title, 'id:', notificationId)
+      } catch (err) {
+        console.error('📱 Mobile notification error:', err)
+      }
+    } else {
+      // Web: Use browser Notification API
+      if (!('Notification' in window)) return
+      
+      if (Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+          body,
+          icon: icon || '/icon.png',
+          badge: '/icon.png',
+          tag: 'chatter-notification',
+          requireInteraction: false
+        })
+        
+        notification.onclick = () => {
+          window.focus()
+          notification.close()
+        }
+        
+        setTimeout(() => notification.close(), 5000)
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission()
+      }
+    }
+  }, [])
+
+  // Request notification permission and create channel on mount
   useEffect(() => {
-    requestNotificationPermission()
-  }, [requestNotificationPermission])
+    const initNotifications = async () => {
+      if (Capacitor.isNativePlatform()) {
+        // Create notification channel for Android 8+
+        try {
+          await LocalNotifications.createChannel({
+            id: 'chatter-messages',
+            name: 'Chatter Messages',
+            description: 'Notifications for new messages',
+            importance: 5, // Max importance
+            visibility: 1, // Public
+            sound: 'default',
+            vibration: true
+          })
+          console.log('📱 Notification channel created')
+        } catch (err) {
+          console.error('Channel creation error:', err)
+        }
+        
+        // Setup Push Notifications for background messaging
+        try {
+          // Request permission
+          const permStatus = await PushNotifications.checkPermissions()
+          console.log('📱 Push permission status:', permStatus.receive)
+          
+          if (permStatus.receive !== 'granted') {
+            const newStatus = await PushNotifications.requestPermissions()
+            if (newStatus.receive !== 'granted') {
+              console.log('📱 Push notification permission denied')
+            }
+          }
+          
+          // Register for push notifications
+          await PushNotifications.register()
+          
+          // Listen for registration success
+          PushNotifications.addListener('registration', async (token) => {
+            console.log('📱 FCM Token:', token.value)
+            // Send token to backend when user is logged in
+            const storedToken = localStorage.getItem('token')
+            if (storedToken) {
+              try {
+                await axios.post(`${API_URL}/user/fcm-token`, 
+                  { token: token.value },
+                  { headers: { Authorization: `Bearer ${storedToken}` } }
+                )
+                console.log('📱 FCM token sent to server')
+              } catch (err) {
+                console.error('Error sending FCM token:', err)
+              }
+            }
+          })
+          
+          // Listen for registration errors
+          PushNotifications.addListener('registrationError', (error) => {
+            console.error('📱 Push registration error:', error)
+          })
+          
+          // Listen for push notifications received
+          PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            console.log('📱 Push notification received:', notification)
+            // Show local notification when app is in foreground
+            if (isAppActiveRef.current) {
+              showNotification(notification.title || 'New Message', notification.body || '')
+            }
+          })
+          
+          // Listen for notification action (when user taps notification)
+          PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+            console.log('📱 Push notification tapped:', notification)
+            // Handle notification tap - could navigate to specific chat
+          })
+          
+        } catch (err) {
+          console.error('📱 Push notification setup error:', err)
+        }
+      }
+      requestNotificationPermission()
+    }
+    initNotifications()
+  }, [requestNotificationPermission, showNotification])
 
   // === CAPACITOR APP LIFECYCLE - Handle background/foreground state ===
   useEffect(() => {
@@ -120,6 +248,10 @@ function App() {
 
     const handleAppStateChange = CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
       console.log(`📱 App state changed: ${isActive ? 'foreground' : 'background'}`)
+      
+      // Update app active state
+      setIsAppActive(isActive)
+      isAppActiveRef.current = isActive
       
       if (!isActive && connection && connection.state === signalR.HubConnectionState.Connected) {
         // App went to background - notify server user is going offline
@@ -401,7 +533,8 @@ function App() {
             return [...prev, message];
           });
 
-          if (isFromSelectedUser && !isMyMessage) {
+          // Only mark as read if app is in foreground AND viewing this user's chat
+          if (isFromSelectedUser && !isMyMessage && isAppActiveRef.current) {
             markAsRead(senderId);
             setIsTyping(false);
           }
@@ -409,16 +542,12 @@ function App() {
         
         // Show notification for incoming messages (not from me)
         if (!isMyMessage) {
-          // Show notification if:
-          // 1. Message is from a different chat (not selected user)
-          // 2. Message is from selected user BUT window is not focused
-          if (!isFromSelectedUser || !document.hasFocus()) {
-            // Find sender name from users list using ref for most up-to-date data
-            const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
-            const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
-            const messagePreview = message.content?.substring(0, 50) || 'New message';
-            showNotification(senderName, messagePreview);
-          }
+          // Always show notification for test - remove condition temporarily
+          const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
+          const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
+          const messagePreview = message.content?.substring(0, 50) || 'New message';
+          console.log('📱 ALWAYS showing notification:', senderName, messagePreview);
+          showNotification(senderName, messagePreview);
         }
 
         // Sidebar Güncelleme

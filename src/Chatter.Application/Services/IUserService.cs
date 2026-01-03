@@ -15,4 +15,7 @@ public interface IUserService
     Task<Result<UserProfileResponse>> GetCurrentUserProfileAsync(Guid userId);
     Task<Result<UserProfileResponse>> GetUserProfileAsync(Guid userId);
     Task<Result<UserProfileResponse>> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
+    
+    // FCM Token
+    Task<Result<bool>> UpdateFcmTokenAsync(Guid userId, string fcmToken);
 }
