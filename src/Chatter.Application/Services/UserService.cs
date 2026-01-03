@@ -91,4 +91,97 @@ public class UserService : IUserService
             return Result<IEnumerable<UserDto>>.Failure(new Error("User.FetchFailed", $"Kullanıcı listesi alınamadı: {ex.Message}"));
         }
     }
+
+    public async Task<Result<UserProfileResponse>> GetCurrentUserProfileAsync(Guid userId)
+    {
+        return await GetUserProfileAsync(userId);
+    }
+
+    public async Task<Result<UserProfileResponse>> GetUserProfileAsync(Guid userId)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return Result<UserProfileResponse>.Failure(new Error("User.NotFound", "Kullanıcı bulunamadı."));
+            }
+
+            var profileResponse = new UserProfileResponse
+            {
+                Id = user.Id.ToString(),
+                UserName = user.UserName!,
+                FullName = user.FullName,
+                Email = user.Email!,
+                Bio = user.Bio,
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                IsOnline = user.IsOnline,
+                LastSeenAt = user.LastSeenAt,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt
+            };
+
+            return Result<UserProfileResponse>.Success(profileResponse);
+        }
+        catch (Exception ex)
+        {
+            return Result<UserProfileResponse>.Failure(new Error("User.ProfileFetchFailed", $"Profil bilgileri alınamadı: {ex.Message}"));
+        }
+    }
+
+    public async Task<Result<UserProfileResponse>> UpdateProfileAsync(Guid userId, UpdateProfileRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return Result<UserProfileResponse>.Failure(new Error("User.NotFound", "Kullanıcı bulunamadı."));
+            }
+
+            // Username benzersizlik kontrolü (eğer değiştiriliyorsa)
+            if (user.UserName != request.UserName)
+            {
+                var existingUser = await _unitOfWork.Users.GetByUsernameAsync(request.UserName);
+                if (existingUser != null && existingUser.Id != userId)
+                {
+                    return Result<UserProfileResponse>.Failure(new Error("User.UsernameExists", "Bu kullanıcı adı zaten kullanılıyor."));
+                }
+            }
+
+            // Profil bilgilerini güncelle
+            user.FullName = request.FullName;
+            user.UserName = request.UserName;
+            user.Bio = request.Bio;
+            user.ProfilePictureUrl = request.ProfilePictureUrl;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            // Güncellemeyi kaydet
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            // Güncellenmiş profili döndür
+            var profileResponse = new UserProfileResponse
+            {
+                Id = user.Id.ToString(),
+                UserName = user.UserName!,
+                FullName = user.FullName,
+                Email = user.Email!,
+                Bio = user.Bio,
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                IsOnline = user.IsOnline,
+                LastSeenAt = user.LastSeenAt,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt
+            };
+
+            return Result<UserProfileResponse>.Success(profileResponse);
+        }
+        catch (Exception ex)
+        {
+            return Result<UserProfileResponse>.Failure(new Error("User.ProfileUpdateFailed", $"Profil güncellenirken hata oluştu: {ex.Message}"));
+        }
+    }
 }

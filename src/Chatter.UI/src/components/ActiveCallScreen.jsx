@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff } from 'lucide-react';
 import './ActiveCallScreen.css';
 
 const ActiveCallScreen = ({ 
@@ -127,20 +128,20 @@ const ActiveCallScreen = ({
 
         <div className="call-controls">
           <button 
-            className={`control-button ${isMuted ? 'active' : ''}`}
+            className={`control-button ${isMuted ? 'muted' : ''}`}
             onClick={handleToggleAudio}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? '🔇' : '🎤'}
+            {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
           </button>
 
           {isVideoCall && (
             <button 
-              className={`control-button ${isVideoOff ? 'active' : ''}`}
+              className={`control-button ${isVideoOff ? 'video-off' : ''}`}
               onClick={handleToggleVideo}
               title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
             >
-              {isVideoOff ? '📷' : '📹'}
+              {isVideoOff ? <VideoOff size={24} /> : <VideoIcon size={24} />}
             </button>
           )}
 
@@ -149,7 +150,7 @@ const ActiveCallScreen = ({
             onClick={onEndCall}
             title="End call"
           >
-            📞
+            <PhoneOff size={24} />
           </button>
         </div>
       </div>

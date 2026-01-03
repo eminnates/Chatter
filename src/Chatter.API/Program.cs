@@ -34,20 +34,51 @@ builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure CORS - Only allow Electron app and specified origins
+// Configure CORS - Allow web, Electron, and mobile (Capacitor)
 var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
-var corsOrigins = corsOriginsEnv?.Split(",") ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+var corsOrigins = new List<string>();
 
-if (builder.Environment.IsProduction() && (corsOrigins.Length == 2 && corsOrigins[0] == "http://localhost:5173"))
+if (!string.IsNullOrEmpty(corsOriginsEnv))
+{
+    corsOrigins.AddRange(corsOriginsEnv.Split(","));
+}
+else
+{
+    // Default origins for development
+    corsOrigins.Add("http://localhost:5173");
+    corsOrigins.Add("http://localhost:3000");
+}
+
+// Add Capacitor origins for mobile
+corsOrigins.Add("capacitor://localhost");
+corsOrigins.Add("http://localhost");
+corsOrigins.Add("ionic://localhost");
+corsOrigins.Add("http://192.168.1.1");
+
+if (builder.Environment.IsProduction() && corsOriginsEnv == null)
 {
     throw new InvalidOperationException("CORS_ALLOWED_ORIGINS must be configured for production environment!");
 }
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowSpecificOrigins",
-        builder => builder
-            .WithOrigins(corsOrigins)
+    options.AddPolicy("AllowAll",
+        policy => policy
+            .SetIsOriginAllowed(origin => 
+            {
+                // Allow all localhost variants and Capacitor schemes
+                if (origin.StartsWith("http://localhost") || 
+                    origin.StartsWith("https://localhost") ||
+                    origin.StartsWith("capacitor://") ||
+                    origin.StartsWith("ionic://") ||
+                    origin.StartsWith("http://192.168.") ||
+                    origin.StartsWith("http://10.0."))
+                {
+                    return true;
+                }
+                // Allow configured origins
+                return corsOrigins.Contains(origin);
+            })
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
@@ -160,8 +191,7 @@ app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 // Add request logging middleware
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-app.UseCors("AllowSpecificOrigins");
-
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 

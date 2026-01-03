@@ -1,4 +1,5 @@
 import React from 'react';
+import { Phone, Video, X, Check } from 'lucide-react';
 import './IncomingCallModal.css';
 
 const IncomingCallModal = ({ call, onAccept, onDecline }) => {
@@ -6,20 +7,23 @@ const IncomingCallModal = ({ call, onAccept, onDecline }) => {
 
   const isVideoCall = call.type === 2;
   const callType = isVideoCall ? 'Video' : 'Voice';
-  const icon = isVideoCall ? '📹' : '📞';
 
   return (
     <div className="incoming-call-overlay">
       <div className="incoming-call-modal">
-        <div className="call-icon">{icon}</div>
+        <div className="call-icon">
+          {isVideoCall ? <Video size={48} /> : <Phone size={48} />}
+        </div>
         <h2>Incoming {callType} Call</h2>
         <p className="caller-name">{call.initiatorFullName || call.initiatorUsername}</p>
         <div className="call-buttons">
           <button className="decline-button" onClick={() => onDecline(call.id)}>
-            ❌ Decline
+            <X size={20} />
+            <span>Decline</span>
           </button>
           <button className="accept-button" onClick={() => onAccept(call)}>
-            ✅ Accept
+            <Check size={20} />
+            <span>Accept</span>
           </button>
         </div>
       </div>

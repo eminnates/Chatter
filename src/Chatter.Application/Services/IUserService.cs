@@ -10,4 +10,9 @@ public interface IUserService
     
     // User ID'leri Guid yapısında olduğu için string? yerine Guid? kullanıyoruz
     Task<Result<IEnumerable<UserDto>>> GetAllUsersAsync(Guid? currentUserId = null);
+    
+    // Profil işlemleri
+    Task<Result<UserProfileResponse>> GetCurrentUserProfileAsync(Guid userId);
+    Task<Result<UserProfileResponse>> GetUserProfileAsync(Guid userId);
+    Task<Result<UserProfileResponse>> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
 }

@@ -13,7 +13,11 @@
     "dev": "vite",
     "build": "vite build",
     "electron:build": "npm run build && electron-builder --win --linux",
-    "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
+    "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "android:build:debug": "npm run android:sync && cd android && ./gradlew assembleDebug"
   },
   "build": {
     "appId": "com.chatter.app",
@@ -59,6 +63,7 @@
     "@capacitor/core": "^8.0.0",
     "@microsoft/signalr": "^8.0.0",
     "axios": "^1.6.0",
+    "lucide-react": "^0.562.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "simple-peer": "^9.11.1"

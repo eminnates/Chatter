@@ -6,10 +6,15 @@ let mainWindow = null;
 let tray = null;
 
 function createWindow() {
+  // Determine icon path based on environment
+  const iconPath = isDev 
+    ? path.join(__dirname, '../public/icon.png')
+    : path.join(process.resourcesPath, 'public/icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, '../public/icon.png'),
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,

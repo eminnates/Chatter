@@ -5,9 +5,15 @@ import './index.css'
 import { useWebRTC } from './hooks/useWebRTC'
 import IncomingCallModal from './components/IncomingCallModal'
 import ActiveCallScreen from './components/ActiveCallScreen'
+import ProfilePage from './components/ProfilePage'
+import SettingsPage from './components/SettingsPage'
+import { getApiUrl, getHubUrl, getConfig } from './utils/config'
+import { 
+  CheckCircle2, XCircle, Info, Phone, Video, 
+  Check, CheckCheck, Paperclip, X, File, LogOut, User, Settings, Menu 
+} from 'lucide-react'
 
-const API_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/api';
-const HUB_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev/hubs/chat';
+// Initialize axios defaults
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
 
 function App() {
@@ -32,6 +38,24 @@ function App() {
   const [toast, setToast] = useState(null)
   const [isTyping, setIsTyping] = useState(false)
   const [typingTimeout, setTypingTimeout] = useState(null)
+  const [showProfilePage, setShowProfilePage] = useState(false)
+  const [viewProfileUserId, setViewProfileUserId] = useState(null)
+  const [showSettingsPage, setShowSettingsPage] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+  
+  // === CONFIG STATES ===
+  // Store base URL in state (without /api), we'll add /api in API calls
+  const [apiUrl, setApiUrl] = useState('')
+  const [hubUrl, setHubUrl] = useState('')
+  const [configLoaded, setConfigLoaded] = useState(false)
+  
+  // Helper to get full API URL with /api prefix
+  const getFullApiUrl = useCallback(() => {
+    if (!apiUrl) return ''
+    const base = apiUrl.replace(/\/+$/, '')
+    return base + '/api'
+  }, [apiUrl])
   
   // === LOGIN & REGISTER STATES ===
   const [isRegistering, setIsRegistering] = useState(false)
@@ -98,6 +122,16 @@ function App() {
   useEffect(() => {
     requestNotificationPermission()
   }, [requestNotificationPermission])
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // === WEBRTC HOOK ===
   const {
@@ -174,11 +208,58 @@ function App() {
     }
   }, [selectedUser])
 
+  // === CONFIG CHANGE HANDLER ===
+  const handleConfigChange = useCallback((newConfig) => {
+    // newConfig.apiUrl is base URL (without /api), getApiUrl will add /api automatically
+    // But we need to store base URL in state, so getApiUrl can add /api when needed
+    setApiUrl(newConfig.apiUrl)
+    setHubUrl(newConfig.hubUrl)
+    
+    // Disconnect current connection if exists
+    if (connection) {
+      connection.stop()
+      setConnection(null)
+      setConnectionStatus('disconnected')
+    }
+    
+    // If user is logged in, reconnect
+    if (token) {
+      setTimeout(() => {
+        // Connection will be re-established by useEffect
+      }, 500)
+    }
+  }, [connection, token])
+
+  // === LOAD CONFIG ON MOUNT (synchronous) ===
+  useEffect(() => {
+    const config = getConfig()
+    console.log('📱 Loading config from localStorage:', config)
+    
+    if (config.apiUrl) {
+      const baseUrl = config.apiUrl.replace(/\/api\/?$/, '')
+      setApiUrl(baseUrl)
+      console.log('✅ API URL loaded:', baseUrl)
+    }
+    
+    if (config.hubUrl) {
+      setHubUrl(config.hubUrl)
+      console.log('✅ Hub URL loaded:', config.hubUrl)
+    } else if (config.apiUrl) {
+      // Auto-detect hub URL if not set
+      const baseUrl = config.apiUrl.replace(/\/api\/?$/, '')
+      const autoHub = baseUrl + '/hubs/chat'
+      setHubUrl(autoHub)
+      console.log('✅ Hub URL auto-detected:', autoHub)
+    }
+    
+    setConfigLoaded(true)
+  }, [])
+
   // === MARK AS READ ===
   const markAsRead = useCallback(async (targetUserId) => {
-    if (!token) return
+    if (!token || !apiUrl) return
     try {
-      await axios.post(`${API_URL}/chat/mark-read/${targetUserId}`, {}, {
+      await axios.post(`${getFullApiUrl()}/chat/mark-read/${targetUserId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setUsers(prev => prev.map(u => 
@@ -187,12 +268,16 @@ function App() {
     } catch (error) {
       console.error("Mark read error:", error)
     }
-  }, [token])
+  }, [token, getFullApiUrl])
 
   // === LOAD USERS ===
   const loadUsers = useCallback(async (activeToken, retryCount = 0) => {
+    if (!apiUrl) {
+      showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
+      return
+    }
     try {
-      const { data } = await axios.get(`${API_URL}/user`, {
+      const { data } = await axios.get(`${getFullApiUrl()}/user`, {
         headers: { Authorization: `Bearer ${activeToken}` }
       })
       const userList = Array.isArray(data) ? data : (data.data || [])
@@ -209,13 +294,13 @@ function App() {
         showToast('Failed to load users. Please refresh.', 'error')
       }
     }
-  }, [])
+  }, [getFullApiUrl, showToast, apiUrl])
 
   // === LOAD MESSAGES ===
   const loadMessages = useCallback(async (userId) => {
-    if (!token) return
+    if (!token || !apiUrl) return
     try {
-      const convResponse = await axios.post(`${API_URL}/chat/conversation/${userId}`, {}, {
+      const convResponse = await axios.post(`${getFullApiUrl()}/chat/conversation/${userId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
@@ -226,7 +311,7 @@ function App() {
 
       if (!conversationId) throw new Error("Conversation ID not found")
 
-      const msgResponse = await axios.get(`${API_URL}/chat/messages/${conversationId}`, {
+      const msgResponse = await axios.get(`${getFullApiUrl()}/chat/messages/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
@@ -237,11 +322,26 @@ function App() {
       console.error("Load messages error:", error)
       setMessages([])
     }
-  }, [token])
+  }, [token, getFullApiUrl, apiUrl])
 
   // === SIGNALR CONNECTION ===
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      // Clean up connection when logged out
+      if (connection) {
+        connection.stop()
+        setConnection(null)
+        setConnectionStatus('disconnected')
+      }
+      return
+    }
+    
+    if (!hubUrl || !apiUrl) {
+      console.warn('⚠️ Cannot connect to SignalR: missing hubUrl or apiUrl', { hubUrl, apiUrl })
+      setConnectionStatus('failed')
+      showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
+      return
+    }
 
     let isMounted = true
     let newConnection = null
@@ -251,7 +351,7 @@ function App() {
       loadUsers(token)
 
       newConnection = new signalR.HubConnectionBuilder()
-        .withUrl(HUB_URL, { 
+        .withUrl(hubUrl, { 
           accessTokenFactory: () => token,
           transport: signalR.HttpTransportType.WebSockets,
           headers: { "ngrok-skip-browser-warning": "true" },
@@ -432,14 +532,18 @@ function App() {
       }
       if (typingTimeout) clearTimeout(typingTimeout)
     }
-  }, [token, loadUsers, markAsRead, showToast])
+  }, [token, hubUrl, apiUrl, loadUsers, markAsRead, showToast])
 
   // === SELECT USER ===
   const handleSelectUser = useCallback((u) => {
     setSelectedUser(u)
     setIsTyping(false)
     markAsRead(u.id)
-  }, [markAsRead])
+    // Close mobile sidebar when user selected
+    if (isMobile) {
+      setIsMobileSidebarOpen(false)
+    }
+  }, [markAsRead, isMobile])
 
   // === LOAD MESSAGES WHEN USER SELECTED ===
   useEffect(() => {
@@ -500,7 +604,7 @@ function App() {
         const formData = new FormData()
         formData.append('file', selectedFile)
 
-        const { data } = await axios.post(`${API_URL}/files/upload`, formData, {
+        const { data } = await axios.post(`${getFullApiUrl()}/files/upload`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         })
 
@@ -612,7 +716,13 @@ function App() {
   const login = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post(`${API_URL}/auth/login`, loginForm)
+      if (!apiUrl) {
+        showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
+        setShowSettingsPage(true)
+        return
+      }
+      
+      const { data } = await axios.post(`${getFullApiUrl()}/auth/login`, loginForm)
       handleAuthSuccess(data)
       showToast('Welcome back!', 'success')
     } catch (error) {
@@ -647,12 +757,18 @@ function App() {
   const register = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post(`${API_URL}/auth/register`, registerForm)
+      if (!apiUrl) {
+        showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
+        setShowSettingsPage(true)
+        return
+      }
+      
+      const { data } = await axios.post(`${getFullApiUrl()}/auth/register`, registerForm)
       
       if (!data.token && !data.data?.token && !data.accessToken) {
         showToast('Account created! Logging you in...', 'success')
         try {
-          const loginResponse = await axios.post(`${API_URL}/auth/login`, {
+          const loginResponse = await axios.post(`${getFullApiUrl()}/auth/login`, {
             email: registerForm.email,
             password: registerForm.password
           })
@@ -710,14 +826,43 @@ function App() {
 
   // === LOGIN/REGISTER SCREEN ===
   if (!token) {
+    // Show settings page if no API URL configured or if explicitly requested
+    if (showSettingsPage || !apiUrl) {
+      return (
+        <div className="container">
+          {toast && (
+            <div className={`toast toast-${toast.type}`}>
+              <div className="toast-icon">
+                {toast.type === 'success' && <CheckCircle2 size={20} />}
+                {toast.type === 'error' && <XCircle size={20} />}
+                {toast.type === 'info' && <Info size={20} />}
+              </div>
+              <span>{toast.message}</span>
+            </div>
+          )}
+          <SettingsPage
+            onClose={() => {
+              setShowSettingsPage(false)
+              if (!apiUrl) {
+                // Keep showing settings if still no API URL
+                setTimeout(() => setShowSettingsPage(true), 100)
+              }
+            }}
+            onConfigChange={handleConfigChange}
+            showToast={showToast}
+          />
+        </div>
+      )
+    }
+    
     return (
       <div className="login-container">
         {toast && (
           <div className={`toast toast-${toast.type}`}>
             <div className="toast-icon">
-              {toast.type === 'success' && '✓'}
-              {toast.type === 'error' && '✕'}
-              {toast.type === 'info' && 'ℹ'}
+              {toast.type === 'success' && <CheckCircle2 size={20} />}
+              {toast.type === 'error' && <XCircle size={20} />}
+              {toast.type === 'info' && <Info size={20} />}
             </div>
             <span>{toast.message}</span>
           </div>
@@ -727,6 +872,14 @@ function App() {
           <div className="login-logo">
             <img src="/logo.png" alt="Chatter Logo" />
           </div>
+          <button 
+            type="button"
+            onClick={() => setShowSettingsPage(true)} 
+            className="login-settings-btn"
+            title="Configure Backend URL"
+          >
+            <Settings size={18} />
+          </button>
           <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
           <form onSubmit={isRegistering ? register : login}>
             {isRegistering ? (
@@ -789,33 +942,73 @@ function App() {
     )
   }
 
+  // === CHECK CONFIG ON MOUNT ===
+  useEffect(() => {
+    if (!apiUrl && !token) {
+      // Show settings page if no config and not logged in
+      setShowSettingsPage(true)
+    }
+  }, [apiUrl, token])
+
   // === MAIN CHAT INTERFACE ===
   return (
     <div className="container">
       {toast && (
         <div className={`toast toast-${toast.type}`}>
           <div className="toast-icon">
-            {toast.type === 'success' && '✓'}
-            {toast.type === 'error' && '✕'}
-            {toast.type === 'info' && 'ℹ'}
+            {toast.type === 'success' && <CheckCircle2 size={20} />}
+            {toast.type === 'error' && <XCircle size={20} />}
+            {toast.type === 'info' && <Info size={20} />}
           </div>
           <span>{toast.message}</span>
         </div>
       )}
+      
+      {!apiUrl && (
+        <div className="config-warning">
+          <Info size={20} />
+          <span>Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.</span>
+          <button onClick={() => setShowSettingsPage(true)} className="config-warning-btn">
+            Ayarlara Git
+          </button>
+        </div>
+      )}
 
-      <div className="sidebar">
+      <div className={`sidebar ${isMobile && !isMobileSidebarOpen ? 'mobile-hidden' : ''}`}>
         <div className="sidebar-header">
           <h3>Chatter</h3>
           <div className="user-profile-summary">
             <small>{user?.fullName || user?.userName}</small>
             {connectionStatus === 'connecting' && (
-              <span style={{ color: '#f59e0b', fontSize: '0.7rem' }}>● Connecting...</span>
+              <span className="connection-status connecting">
+                <span className="status-dot"></span>
+                Connecting...
+              </span>
             )}
             {connectionStatus === 'failed' && (
-              <span style={{ color: '#ef4444', fontSize: '0.7rem' }}>● Disconnected</span>
+              <span className="connection-status disconnected">
+                <span className="status-dot"></span>
+                Disconnected
+              </span>
             )}
           </div>
-          <button onClick={logout} className="logout-btn">Logout</button>
+          <div className="sidebar-header-actions">
+            <button onClick={() => {
+              setViewProfileUserId(null)
+              setShowProfilePage(true)
+            }} className="profile-btn">
+              <User size={18} />
+              <span>Profil</span>
+            </button>
+            <button onClick={() => setShowSettingsPage(true)} className="settings-btn">
+              <Settings size={18} />
+              <span>Ayarlar</span>
+            </button>
+            <button onClick={logout} className="logout-btn">
+              <LogOut size={18} />
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
         
         <div className="user-list">
@@ -829,6 +1022,11 @@ function App() {
                 key={u.id} 
                 className={`user-item ${selectedUser?.id === u.id ? 'active' : ''}`}
                 onClick={() => handleSelectUser(u)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setViewProfileUserId(u.id)
+                  setShowProfilePage(true)
+                }}
               >
                 <div className="user-avatar">
                   {(u.fullName?.[0] || u.userName?.[0] || '?').toUpperCase()}
@@ -849,21 +1047,62 @@ function App() {
       </div>
       
       <div className="chat-area">
-        {selectedUser ? (
+        {showProfilePage ? (
+          <ProfilePage
+            user={viewProfileUserId ? users.find(u => u.id === viewProfileUserId) || {} : user}
+            userId={viewProfileUserId}
+            currentUserId={user?.id}
+            token={token}
+            API_URL={apiUrl}
+            onUpdate={(updatedUser) => {
+              setUser(updatedUser)
+              localStorage.setItem('user', JSON.stringify(updatedUser))
+            }}
+            onClose={() => {
+              setShowProfilePage(false)
+              setViewProfileUserId(null)
+            }}
+            showToast={showToast}
+          />
+        ) : selectedUser ? (
           <>
             <div className="chat-header">
+              {isMobile && (
+                <button 
+                  className="mobile-menu-btn"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  title="Open Menu"
+                >
+                  <Menu size={24} />
+                </button>
+              )}
               <h3>{selectedUser.fullName || selectedUser.userName}</h3>
               {selectedUser.isOnline && (
-                <span style={{ color: '#10b981', fontSize: '0.8rem', marginLeft: 10 }}>● Online</span>
+                <span className="online-status">
+                  <span className="status-dot online"></span>
+                  Online
+                </span>
               )}
-              <div className="call-buttons" style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+              <div className="chat-header-actions">
+                <button
+                  onClick={() => {
+                    setViewProfileUserId(selectedUser.id)
+                    setShowProfilePage(true)
+                  }}
+                  className="profile-view-btn"
+                  title="View Profile"
+                >
+                  <User size={18} />
+                </button>
+              </div>
+              <div className="call-buttons">
                 <button 
                   className="call-btn audio-call"
                   onClick={() => handleInitiateCall(selectedUser.id, 1)}
                   title="Voice Call"
                   disabled={callStatus === 'active' || callStatus === 'ringing'}
                 >
-                  📞
+                  <Phone size={20} />
                 </button>
                 <button 
                   className="call-btn video-call"
@@ -871,7 +1110,7 @@ function App() {
                   title="Video Call"
                   disabled={callStatus === 'active' || callStatus === 'ringing'}
                 >
-                  📹
+                  <Video size={20} />
                 </button>
               </div>
             </div>
@@ -888,7 +1127,7 @@ function App() {
                     <div key={msg.id || i} className="system-message">
                       <div className={`system-message-content ${isNegative ? 'negative' : ''}`}>
                         <span className="call-icon">
-                          {msg.content.includes('Video') ? '📹' : '📞'}
+                          {msg.content.includes('Video') ? <Video size={16} /> : <Phone size={16} />}
                         </span>
                         <span className="call-text">{msg.content}</span>
                       </div>
@@ -910,7 +1149,7 @@ function App() {
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
                           <img 
-                            src={`${API_URL.replace('/api', '')}${att.fileUrl}`} 
+                            src={`${apiUrl}${att.fileUrl}`} 
                             alt={att.fileName}
                             style={{
                               maxWidth: '100%',
@@ -919,16 +1158,17 @@ function App() {
                               objectFit: 'cover',
                               cursor: 'pointer'
                             }}
-                            onClick={() => window.open(`${API_URL.replace('/api', '')}${att.fileUrl}`, '_blank')}
+                            onClick={() => window.open(`${apiUrl}${att.fileUrl}`, '_blank')}
                           />
                         ) : (
                           <a 
-                            href={`${API_URL.replace('/api', '')}${att.fileUrl}`} 
+                            href={`${apiUrl}${att.fileUrl}`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="file-attachment"
                           >
-                            📄 {att.fileName}
+                            <File size={18} />
+                            <span>{att.fileName}</span>
                           </a>
                         )}
                       </div>
@@ -939,12 +1179,8 @@ function App() {
                   <div className="msg-time">
                     {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     {msg.senderId === user?.id && (
-                      <span style={{ 
-                        marginLeft: 5, 
-                        fontSize: '0.8rem', 
-                        color: msg.isRead ? '#4ade80' : '#94a3b8' 
-                      }}>
-                        {msg.isRead ? '✓✓' : '✓'}
+                      <span className={`read-status ${msg.isRead ? 'read' : 'sent'}`}>
+                        {msg.isRead ? <CheckCheck size={16} /> : <Check size={16} />}
                       </span>
                     )}
                   </div>
@@ -968,7 +1204,8 @@ function App() {
             <form className="input-area" onSubmit={sendMessage}>
               {selectedFile && (
                 <div className="file-preview">
-                  <span>📎 {selectedFile.name}</span>
+                  <Paperclip size={16} />
+                  <span>{selectedFile.name}</span>
                   <button 
                     type="button" 
                     onClick={() => {
@@ -976,7 +1213,7 @@ function App() {
                       if (fileInputRef.current) fileInputRef.current.value = ''
                     }}
                   >
-                    ✕
+                    <X size={16} />
                   </button>
                 </div>
               )}
@@ -994,7 +1231,7 @@ function App() {
                 className="attach-btn"
                 title="Attach file"
               >
-                📎
+                <Paperclip size={20} />
               </button>
 
               <input 
@@ -1009,7 +1246,7 @@ function App() {
               </button>
             </form>
           </>
-        ) : (
+        ) : showProfilePage ? null : (
           <div className="no-chat">
             <div className="no-chat-content">
               <h2>Select a Conversation</h2>
@@ -1032,14 +1269,17 @@ function App() {
       {callStatus === 'ringing' && activeCall && activeCall.initiatorId === user?.id && (
         <div className="incoming-call-overlay">
           <div className="incoming-call-modal">
-            <div className="call-icon">{activeCall.type === 2 ? '📹' : '📞'}</div>
+            <div className="call-icon">
+              {activeCall.type === 2 ? <Video size={48} /> : <Phone size={48} />}
+            </div>
             <h2>Calling...</h2>
             <p className="caller-name">
               {users.find(u => activeCall.participantIds?.find(id => id !== user?.id) === u.id)?.fullName || 'User'}
             </p>
             <div className="call-buttons">
               <button className="decline-button" onClick={endCall}>
-                ❌ Cancel
+                <X size={20} />
+                <span>Cancel</span>
               </button>
             </div>
           </div>

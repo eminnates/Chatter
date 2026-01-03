@@ -42,4 +42,44 @@ public class UserController : BaseApiController // ControllerBase yerine BaseApi
         
         return HandleResult(result);
     }
+
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return BadRequest(new { error = new { Code = "Auth.InvalidToken", Message = "Geçersiz token." } });
+        }
+
+        var result = await _userService.GetCurrentUserProfileAsync(userId);
+        return HandleResult(result);
+    }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return BadRequest(new { error = new { Code = "Auth.InvalidToken", Message = "Geçersiz token." } });
+        }
+
+        var result = await _userService.UpdateProfileAsync(userId, request);
+        return HandleResult(result);
+    }
+
+    [HttpGet("{userId}/profile")]
+    public async Task<IActionResult> GetUserProfile(string userId)
+    {
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var parsedUserId))
+        {
+            return BadRequest(new { error = new { Code = "User.InvalidId", Message = "Geçersiz kullanıcı ID'si." } });
+        }
+
+        var result = await _userService.GetUserProfileAsync(parsedUserId);
+        return HandleResult(result);
+    }
 }
