@@ -60,10 +60,10 @@ public class FilesController : BaseApiController
                 await file.CopyToAsync(stream);
             }
 
-            // 7. Dönecek veri objesini hazırla
+            // 7. Dönecek veri objesini hazırla - /api/files/ formatında
             var fileData = new
             {
-                Url = $"/uploads/{uniqueFileName}",
+                Url = $"/api/files/{uniqueFileName}",
                 FileName = fileName,
                 FileSize = file.Length,
                 ContentType = file.ContentType
@@ -76,6 +76,67 @@ public class FilesController : BaseApiController
         {
             // Beklenmedik hataları yakala
             return HandleResult(Result<object>.Failure(new Error("File.UploadException", $"Dosya yüklenirken hata oluştu: {ex.Message}")));
+        }
+    }
+
+    // Serve files from /api/files/{fileName}
+    [HttpGet("{fileName}")]
+    public IActionResult GetFile(string fileName)
+    {
+        return ServeFile(fileName);
+    }
+    
+    // Also serve files from /uploads/{fileName} for backward compatibility with old database records
+    [HttpGet("/uploads/{fileName}")]
+    public IActionResult GetFileFromUploads(string fileName)
+    {
+        return ServeFile(fileName);
+    }
+    
+    private IActionResult ServeFile(string fileName)
+    {
+        try
+        {
+            // Güvenlik: Path traversal saldırılarını önle
+            if (fileName.Contains("..") || fileName.Contains("/") || fileName.Contains("\\"))
+            {
+                return BadRequest("Geçersiz dosya adı.");
+            }
+
+            var webRootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var filePath = Path.Combine(webRootPath, "uploads", fileName);
+
+            if (!System.IO.File.Exists(filePath))
+            {
+                return NotFound("Dosya bulunamadı.");
+            }
+
+            // MIME type belirle
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".pdf" => "application/pdf",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".zip" => "application/zip",
+                ".mp3" => "audio/mpeg",
+                ".mp4" => "video/mp4",
+                _ => "application/octet-stream"
+            };
+
+            // CORS headers for cross-origin image loading
+            Response.Headers.Append("Access-Control-Allow-Origin", "*");
+            Response.Headers.Append("Access-Control-Allow-Methods", "GET");
+            Response.Headers.Append("Cache-Control", "public, max-age=31536000");
+
+            var fileBytes = System.IO.File.ReadAllBytes(filePath);
+            return File(fileBytes, contentType);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Dosya okunurken hata: {ex.Message}");
         }
     }
 }

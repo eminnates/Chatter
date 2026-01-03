@@ -8,7 +8,8 @@ import ActiveCallScreen from './components/ActiveCallScreen'
 import ProfilePage from './components/ProfilePage'
 import { 
   CheckCircle2, XCircle, Info, Phone, Video, 
-  Check, CheckCheck, Paperclip, X, File, LogOut, User, Menu 
+  Check, CheckCheck, Paperclip, X, File, LogOut, User, Menu, Sun, Moon, Volume2, VolumeX,
+  Maximize2, Loader
 } from 'lucide-react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
@@ -23,6 +24,126 @@ const HUB_URL = BACKEND_URL + '/hubs/chat'
 // Initialize axios defaults
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
 
+// SecureImage component - loads images with ngrok bypass header
+const SecureImage = ({ src, alt, className, onClick }) => {
+  const [imageSrc, setImageSrc] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!src) return
+    
+    let isMounted = true
+    setLoading(true)
+    setError(false)
+
+    fetch(src, {
+      headers: {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to load image')
+        return response.blob()
+      })
+      .then(blob => {
+        if (isMounted) {
+          const objectUrl = URL.createObjectURL(blob)
+          setImageSrc(objectUrl)
+          setLoading(false)
+        }
+      })
+      .catch(err => {
+        console.error('SecureImage load error:', err)
+        if (isMounted) {
+          setError(true)
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+      if (imageSrc) URL.revokeObjectURL(imageSrc)
+    }
+  }, [src])
+
+  if (loading) {
+    return (
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(184, 212, 168, 0.1)', minHeight: '100px' }}>
+        <Loader size={24} className="spinning" style={{ color: '#B8D4A8' }} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245, 140, 140, 0.1)', minHeight: '100px', color: '#f58c8c' }}>
+        <span>Resim yüklenemedi</span>
+      </div>
+    )
+  }
+
+  return (
+    <img 
+      src={imageSrc} 
+      alt={alt} 
+      className={className} 
+      onClick={onClick}
+    />
+  )
+}
+
+// === SOUND EFFECTS SYSTEM ===
+const createSoundEffect = (frequency, duration, type = 'sine', volume = 0.3) => {
+  return () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.value = frequency
+      oscillator.type = type
+      gainNode.gain.setValueAtTime(volume, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + duration)
+    } catch (err) {
+      console.log('Sound not supported:', err)
+    }
+  }
+}
+
+// Warm, friendly sound effects
+const sounds = {
+  messageSent: () => {
+    // Gentle "whoosh" - ascending tone
+    const play = createSoundEffect(440, 0.15, 'sine', 0.2)
+    play()
+    setTimeout(() => createSoundEffect(587, 0.1, 'sine', 0.15)(), 50)
+  },
+  messageReceived: () => {
+    // Soft "pop" - descending tone
+    const play = createSoundEffect(587, 0.12, 'sine', 0.25)
+    play()
+    setTimeout(() => createSoundEffect(440, 0.15, 'sine', 0.2)(), 60)
+  },
+  notification: () => {
+    // Gentle chime
+    createSoundEffect(523, 0.2, 'sine', 0.2)()
+    setTimeout(() => createSoundEffect(659, 0.25, 'sine', 0.15)(), 100)
+  },
+  connect: () => {
+    // Happy connection sound
+    createSoundEffect(392, 0.1, 'sine', 0.15)()
+    setTimeout(() => createSoundEffect(523, 0.1, 'sine', 0.15)(), 80)
+    setTimeout(() => createSoundEffect(659, 0.15, 'sine', 0.2)(), 160)
+  }
+}
+
 function App() {
   // === AUTH STATES ===
   const [token, setToken] = useState(() => localStorage.getItem('token'))
@@ -34,6 +155,10 @@ function App() {
     }
   })
   
+  // === THEME & SOUND STATES ===
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('soundEnabled') !== 'false')
+  
   // === CHAT & UI STATES ===
   const [users, setUsers] = useState([]) 
   const [selectedUser, setSelectedUser] = useState(null)
@@ -42,6 +167,10 @@ function App() {
   const [connection, setConnection] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [selectedFile, setSelectedFile] = useState(null)
+  const [lightboxImage, setLightboxImage] = useState(null) // For fullscreen image viewer
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isCompressing, setIsCompressing] = useState(false)
   const [toast, setToast] = useState(null)
   const [isTyping, setIsTyping] = useState(false)
   const [typingTimeout, setTypingTimeout] = useState(null)
@@ -421,6 +550,40 @@ function App() {
     usersRef.current = users // Users değiştikçe Ref'i güncelle
   }, [users])
 
+  // === THEME EFFECT ===
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  // === SOUND EFFECT HELPER ===
+  const playSound = useCallback((soundName) => {
+    if (soundEnabled && sounds[soundName]) {
+      sounds[soundName]()
+    }
+  }, [soundEnabled])
+
+  // === TOGGLE THEME ===
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const newTheme = prev === 'dark' ? 'light' : 'dark'
+      return newTheme
+    })
+  }, [])
+
+  // === TOGGLE SOUND ===
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => {
+      const newValue = !prev
+      localStorage.setItem('soundEnabled', newValue.toString())
+      if (newValue) {
+        // Play a test sound when enabling
+        sounds.connect()
+      }
+      return newValue
+    })
+  }, [])
+
   // === AUTO SCROLL ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -604,6 +767,11 @@ function App() {
             return [...prev, message];
           });
 
+          // Play sound for received messages (not my own)
+          if (!isMyMessage && isFromSelectedUser) {
+            playSound('messageReceived')
+          }
+
           // Only mark as read if app is in foreground AND viewing this user's chat
           if (isFromSelectedUser && !isMyMessage && isAppActiveRef.current) {
             markAsRead(senderId);
@@ -615,6 +783,9 @@ function App() {
         // Only on WEB platform - native uses FCM push notifications
         // WhatsApp behavior: No notification when app is in foreground on native
         if (!isMyMessage && (!isFromSelectedUser || !isAppActiveRef.current)) {
+          // Play notification sound
+          playSound('notification')
+          
           // Only show local notification on web platform
           if (!Capacitor.isNativePlatform()) {
             const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
@@ -814,12 +985,22 @@ function App() {
 
     try {
       if (selectedFile) {
+        setIsUploading(true)
+        setUploadProgress(0)
+        
         const formData = new FormData()
         formData.append('file', selectedFile)
 
         const { data } = await axios.post(`${API_URL}/files/upload`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+            setUploadProgress(percentCompleted)
+          }
         })
+        
+        setIsUploading(false)
+        setUploadProgress(0)
 
         attachmentData = {
           fileName: data.fileName,
@@ -847,6 +1028,9 @@ function App() {
       }
 
       setMessages(prev => [...prev, optimisticMessage])
+      
+      // Play send sound
+      playSound('messageSent')
 
       setUsers(prev => {
         const userIndex = prev.findIndex(u => u.id === selectedUser.id)
@@ -872,6 +1056,8 @@ function App() {
 
     } catch (err) {
       console.error("❌ Send message error:", err)
+      setIsUploading(false)
+      setUploadProgress(0)
       const errorMessage = err.response?.data?.message || 
                           err.response?.data?.title ||
                           err.message ||
@@ -974,14 +1160,14 @@ function App() {
             password: registerForm.password
           })
           handleAuthSuccess(loginResponse.data)
-          showToast('Welcome to Chatter!', 'success')
+          showToast('Welcome aboard! 🎉', 'success')
         } catch (loginError) {
           showToast('Account created! Please login with your credentials.', 'success')
           setIsRegistering(false)
         }
       } else {
         handleAuthSuccess(data)
-        showToast('Welcome to Chatter!', 'success')
+        showToast('Welcome back! 👋', 'success')
       }
     } catch (error) {
       const errorData = error.response?.data
@@ -1061,7 +1247,7 @@ function App() {
           <div className="login-logo">
             <img src="/logo.png" alt="Chatter Logo" />
           </div>
-          <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
+          <h2>{isRegistering ? 'Join the conversation 🎉' : 'Hey there! 👋'}</h2>
           <form onSubmit={isRegistering ? register : login}>
             {isRegistering ? (
               <>
@@ -1113,9 +1299,9 @@ function App() {
                 />
               </>
             )}
-            <button type="submit">{isRegistering ? 'Sign Up' : 'Sign In'}</button>
+            <button type="submit">{isRegistering ? 'Get Started ✨' : 'Let\'s Go!'}</button>
             <p onClick={() => setIsRegistering(!isRegistering)}>
-              {isRegistering ? 'Already have an account? Login' : "Don't have an account? Register"}
+              {isRegistering ? 'Already have an account? Sign in here' : "New here? Create an account"}
             </p>
           </form>
         </div>
@@ -1153,23 +1339,29 @@ function App() {
             {connectionStatus === 'connecting' && (
               <span className="connection-status connecting">
                 <span className="status-dot"></span>
-                Connecting...
+                Getting ready...
               </span>
             )}
             {connectionStatus === 'failed' && (
               <span className="connection-status disconnected">
                 <span className="status-dot"></span>
-                Disconnected
+                Reconnecting...
               </span>
             )}
           </div>
           <div className="sidebar-header-actions">
+            <button onClick={toggleTheme} className="theme-btn" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button onClick={toggleSound} className="sound-btn" title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}>
+              {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            </button>
             <button onClick={() => {
               setViewProfileUserId(null)
               setShowProfilePage(true)
             }} className="profile-btn">
               <User size={18} />
-              <span>Profil</span>
+              <span>Profile</span>
             </button>
             <button onClick={logout} className="logout-btn">
               <LogOut size={18} />
@@ -1181,7 +1373,7 @@ function App() {
         <div className="user-list">
           {users.length === 0 ? (
             <p style={{ padding: 20, color: '#94a3b8', textAlign: 'center' }}>
-              {connectionStatus === 'connecting' ? 'Loading users...' : 'No users found'}
+              {connectionStatus === 'connecting' ? 'Finding your friends...' : 'Your friends will appear here ✨'}
             </p>
           ) : (
             users.filter(u => u.id !== user?.id).map(u => (
@@ -1315,18 +1507,19 @@ function App() {
                     {msg.attachments?.map(att => (
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
-                          <img 
-                            src={`${BACKEND_URL}${att.fileUrl}`} 
-                            alt={att.fileName}
-                            style={{
-                              maxWidth: '100%',
-                              maxHeight: '300px',
-                              borderRadius: 12,
-                              objectFit: 'cover',
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => window.open(`${BACKEND_URL}${att.fileUrl}`, '_blank')}
-                          />
+                          <div 
+                            className="msg-image-container"
+                            onClick={() => setLightboxImage(`${BACKEND_URL}${att.fileUrl}`)}
+                          >
+                            <SecureImage 
+                              src={`${BACKEND_URL}${att.fileUrl}`} 
+                              alt={att.fileName}
+                              className="msg-image"
+                            />
+                            <div className="msg-image-overlay">
+                              <Maximize2 size={24} />
+                            </div>
+                          </div>
                         ) : (
                           <a 
                             href={`${BACKEND_URL}${att.fileUrl}`} 
@@ -1371,8 +1564,37 @@ function App() {
             <form className="input-area" onSubmit={sendMessage}>
               {selectedFile && (
                 <div className="file-preview">
-                  <Paperclip size={16} />
-                  <span>{selectedFile.name}</span>
+                  {selectedFile.type?.startsWith('image/') ? (
+                    <>
+                      <img 
+                        src={URL.createObjectURL(selectedFile)} 
+                        alt="Preview" 
+                        className="file-preview-image"
+                      />
+                      <div className="file-preview-info">
+                        <span className="file-preview-name">{selectedFile.name}</span>
+                        <span className="file-preview-size">
+                          {(selectedFile.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <File size={20} />
+                      <div className="file-preview-info">
+                        <span className="file-preview-name">{selectedFile.name}</span>
+                        <span className="file-preview-size">
+                          {(selectedFile.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {isCompressing && (
+                    <div className="compression-status">
+                      <Loader size={14} className="spinning" />
+                      <span>Sıkıştırılıyor...</span>
+                    </div>
+                  )}
                   <button 
                     type="button" 
                     onClick={() => {
@@ -1382,6 +1604,16 @@ function App() {
                   >
                     <X size={16} />
                   </button>
+                </div>
+              )}
+              
+              {isUploading && (
+                <div className="upload-progress-container">
+                  <div 
+                    className="upload-progress-bar" 
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                  <span className="upload-progress-text">{uploadProgress}%</span>
                 </div>
               )}
               
@@ -1405,19 +1637,19 @@ function App() {
                 ref={messageInputRef}
                 value={messageInput}
                 onChange={e => setMessageInput(e.target.value)}
-                placeholder="Write a message..."
+                placeholder="Say something nice..."
                 disabled={connectionStatus !== 'connected'}
               />
               <button type="submit" disabled={connectionStatus !== 'connected'}>
-                {connectionStatus === 'connecting' ? '...' : 'Send'}
+                {connectionStatus === 'connecting' ? '...' : '✨ Send'}
               </button>
             </form>
           </>
         ) : showProfilePage ? null : (
           <div className="no-chat">
             <div className="no-chat-content">
-              <h2>Select a Conversation</h2>
-              <p>Choose a contact from the sidebar to start messaging.</p>
+              <h2>Ready to chat? 💬</h2>
+              <p>Pick a friend from the sidebar and say hello!</p>
             </div>
           </div>
         )}
@@ -1465,6 +1697,21 @@ function App() {
           onToggleAudio={toggleAudio}
           onToggleVideo={toggleVideo}
         />
+      )}
+
+      {/* Lightbox Image Viewer */}
+      {lightboxImage && (
+        <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>
+            <X size={32} />
+          </button>
+          <SecureImage 
+            src={lightboxImage} 
+            alt="Full size" 
+            className="lightbox-image"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
     </div>
   )
