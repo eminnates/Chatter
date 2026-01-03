@@ -8,5 +8,6 @@ namespace Chatter.Domain.Interfaces
         Task<IEnumerable<Call>> GetCallHistoryAsync(Guid userId, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
         Task<Call?> GetActiveCallByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
         Task<IEnumerable<Call>> GetCallsByConversationIdAsync(Guid conversationId, CancellationToken cancellationToken = default);
+        Task<int> ForceEndUserCallsAsync(Guid userId, CancellationToken cancellationToken = default);
     }
 }

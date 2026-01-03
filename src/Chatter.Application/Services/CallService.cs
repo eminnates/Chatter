@@ -236,6 +236,20 @@ namespace Chatter.Application.Services
             return Result<CallDto?>.Success(MapToDto(call));
         }
 
+        public async Task<Result<int>> ForceEndUserCallsAsync(Guid userId)
+        {
+            try
+            {
+                var endedCount = await _unitOfWork.Calls.ForceEndUserCallsAsync(userId);
+                await _unitOfWork.SaveChangesAsync();
+                return Result<int>.Success(endedCount);
+            }
+            catch (Exception ex)
+            {
+                return Result<int>.Failure(new Error("Call.ForceEndError", ex.Message));
+            }
+        }
+
         private CallDto MapToDto(Call call)
         {
             return new CallDto

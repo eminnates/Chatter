@@ -111,6 +111,15 @@ public class ChatHub : Hub
                     user.LastSeenAt = DateTime.UtcNow;
                 }
                 
+                    // Force end any active calls when user goes completely offline
+                    var endedCalls = await _callService.ForceEndUserCallsAsync(userId);
+                    if (endedCalls.IsSuccess && endedCalls.Value > 0)
+                    {
+                        Console.WriteLine($"🔴 Force ended {endedCalls.Value} call(s) for offline user {userId}");
+                        // Notify other participants that call ended
+                        await Clients.All.SendAsync("CallEnded", new { userId, reason = "UserDisconnected" });
+                    }
+                    
                     await _unitOfWork.SaveChangesAsync();
                     await Clients.All.SendAsync("UserOffline", userId);
                     Console.WriteLine($"👋 User {userId} went offline");

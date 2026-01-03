@@ -54,5 +54,27 @@ namespace Chatter.Infrastructure.Repositories
                 .OrderByDescending(c => c.CreatedAt)
                 .ToListAsync(cancellationToken);
         }
+
+        public async Task<int> ForceEndUserCallsAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var activeCalls = await _dbSet
+                .Include(c => c.Conversation)
+                    .ThenInclude(conv => conv.Participants)
+                .Where(c => c.Status == CallStatus.Active || c.Status == CallStatus.Ringing)
+                .Where(c => c.Conversation.Participants.Any(p => p.UserId == userId))
+                .ToListAsync(cancellationToken);
+
+            foreach (var call in activeCalls)
+            {
+                call.Status = CallStatus.Ended;
+                call.EndedAt = DateTime.UtcNow;
+                if (call.StartedAt.HasValue)
+                {
+                    call.DurationInSeconds = (int)(DateTime.UtcNow - call.StartedAt.Value).TotalSeconds;
+                }
+            }
+
+            return activeCalls.Count;
+        }
     }
 }

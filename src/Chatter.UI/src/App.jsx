@@ -6,12 +6,15 @@ import { useWebRTC } from './hooks/useWebRTC'
 import IncomingCallModal from './components/IncomingCallModal'
 import ActiveCallScreen from './components/ActiveCallScreen'
 import ProfilePage from './components/ProfilePage'
-import SettingsPage from './components/SettingsPage'
-import { getApiUrl, getHubUrl, getConfig } from './utils/config'
 import { 
   CheckCircle2, XCircle, Info, Phone, Video, 
-  Check, CheckCheck, Paperclip, X, File, LogOut, User, Settings, Menu 
+  Check, CheckCheck, Paperclip, X, File, LogOut, User, Menu 
 } from 'lucide-react'
+
+// === HARDCODED BACKEND CONFIG ===
+const BACKEND_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev'
+const API_URL = BACKEND_URL + '/api'
+const HUB_URL = BACKEND_URL + '/hubs/chat'
 
 // Initialize axios defaults
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
@@ -40,22 +43,8 @@ function App() {
   const [typingTimeout, setTypingTimeout] = useState(null)
   const [showProfilePage, setShowProfilePage] = useState(false)
   const [viewProfileUserId, setViewProfileUserId] = useState(null)
-  const [showSettingsPage, setShowSettingsPage] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  
-  // === CONFIG STATES ===
-  // Store base URL in state (without /api), we'll add /api in API calls
-  const [apiUrl, setApiUrl] = useState('')
-  const [hubUrl, setHubUrl] = useState('')
-  const [configLoaded, setConfigLoaded] = useState(false)
-  
-  // Helper to get full API URL with /api prefix
-  const getFullApiUrl = useCallback(() => {
-    if (!apiUrl) return ''
-    const base = apiUrl.replace(/\/+$/, '')
-    return base + '/api'
-  }, [apiUrl])
   
   // === LOGIN & REGISTER STATES ===
   const [isRegistering, setIsRegistering] = useState(false)
@@ -208,58 +197,11 @@ function App() {
     }
   }, [selectedUser])
 
-  // === CONFIG CHANGE HANDLER ===
-  const handleConfigChange = useCallback((newConfig) => {
-    // newConfig.apiUrl is base URL (without /api), getApiUrl will add /api automatically
-    // But we need to store base URL in state, so getApiUrl can add /api when needed
-    setApiUrl(newConfig.apiUrl)
-    setHubUrl(newConfig.hubUrl)
-    
-    // Disconnect current connection if exists
-    if (connection) {
-      connection.stop()
-      setConnection(null)
-      setConnectionStatus('disconnected')
-    }
-    
-    // If user is logged in, reconnect
-    if (token) {
-      setTimeout(() => {
-        // Connection will be re-established by useEffect
-      }, 500)
-    }
-  }, [connection, token])
-
-  // === LOAD CONFIG ON MOUNT (synchronous) ===
-  useEffect(() => {
-    const config = getConfig()
-    console.log('📱 Loading config from localStorage:', config)
-    
-    if (config.apiUrl) {
-      const baseUrl = config.apiUrl.replace(/\/api\/?$/, '')
-      setApiUrl(baseUrl)
-      console.log('✅ API URL loaded:', baseUrl)
-    }
-    
-    if (config.hubUrl) {
-      setHubUrl(config.hubUrl)
-      console.log('✅ Hub URL loaded:', config.hubUrl)
-    } else if (config.apiUrl) {
-      // Auto-detect hub URL if not set
-      const baseUrl = config.apiUrl.replace(/\/api\/?$/, '')
-      const autoHub = baseUrl + '/hubs/chat'
-      setHubUrl(autoHub)
-      console.log('✅ Hub URL auto-detected:', autoHub)
-    }
-    
-    setConfigLoaded(true)
-  }, [])
-
   // === MARK AS READ ===
   const markAsRead = useCallback(async (targetUserId) => {
-    if (!token || !apiUrl) return
+    if (!token) return
     try {
-      await axios.post(`${getFullApiUrl()}/chat/mark-read/${targetUserId}`, {}, {
+      await axios.post(`${API_URL}/chat/mark-read/${targetUserId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setUsers(prev => prev.map(u => 
@@ -268,16 +210,12 @@ function App() {
     } catch (error) {
       console.error("Mark read error:", error)
     }
-  }, [token, getFullApiUrl])
+  }, [token])
 
   // === LOAD USERS ===
   const loadUsers = useCallback(async (activeToken, retryCount = 0) => {
-    if (!apiUrl) {
-      showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
-      return
-    }
     try {
-      const { data } = await axios.get(`${getFullApiUrl()}/user`, {
+      const { data } = await axios.get(`${API_URL}/user`, {
         headers: { Authorization: `Bearer ${activeToken}` }
       })
       const userList = Array.isArray(data) ? data : (data.data || [])
@@ -294,13 +232,13 @@ function App() {
         showToast('Failed to load users. Please refresh.', 'error')
       }
     }
-  }, [getFullApiUrl, showToast, apiUrl])
+  }, [showToast])
 
   // === LOAD MESSAGES ===
   const loadMessages = useCallback(async (userId) => {
-    if (!token || !apiUrl) return
+    if (!token) return
     try {
-      const convResponse = await axios.post(`${getFullApiUrl()}/chat/conversation/${userId}`, {}, {
+      const convResponse = await axios.post(`${API_URL}/chat/conversation/${userId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
@@ -311,7 +249,7 @@ function App() {
 
       if (!conversationId) throw new Error("Conversation ID not found")
 
-      const msgResponse = await axios.get(`${getFullApiUrl()}/chat/messages/${conversationId}`, {
+      const msgResponse = await axios.get(`${API_URL}/chat/messages/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
@@ -322,7 +260,7 @@ function App() {
       console.error("Load messages error:", error)
       setMessages([])
     }
-  }, [token, getFullApiUrl, apiUrl])
+  }, [token])
 
   // === SIGNALR CONNECTION ===
   useEffect(() => {
@@ -335,13 +273,6 @@ function App() {
       }
       return
     }
-    
-    if (!hubUrl || !apiUrl) {
-      console.warn('⚠️ Cannot connect to SignalR: missing hubUrl or apiUrl', { hubUrl, apiUrl })
-      setConnectionStatus('failed')
-      showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
-      return
-    }
 
     let isMounted = true
     let newConnection = null
@@ -351,7 +282,7 @@ function App() {
       loadUsers(token)
 
       newConnection = new signalR.HubConnectionBuilder()
-        .withUrl(hubUrl, { 
+        .withUrl(HUB_URL, { 
           accessTokenFactory: () => token,
           transport: signalR.HttpTransportType.WebSockets,
           headers: { "ngrok-skip-browser-warning": "true" },
@@ -532,7 +463,7 @@ function App() {
       }
       if (typingTimeout) clearTimeout(typingTimeout)
     }
-  }, [token, hubUrl, apiUrl, loadUsers, markAsRead, showToast])
+  }, [token, loadUsers, markAsRead, showToast])
 
   // === SELECT USER ===
   const handleSelectUser = useCallback((u) => {
@@ -604,7 +535,7 @@ function App() {
         const formData = new FormData()
         formData.append('file', selectedFile)
 
-        const { data } = await axios.post(`${getFullApiUrl()}/files/upload`, formData, {
+        const { data } = await axios.post(`${API_URL}/files/upload`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         })
 
@@ -716,13 +647,7 @@ function App() {
   const login = async (e) => {
     e.preventDefault()
     try {
-      if (!apiUrl) {
-        showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
-        setShowSettingsPage(true)
-        return
-      }
-      
-      const { data } = await axios.post(`${getFullApiUrl()}/auth/login`, loginForm)
+      const { data } = await axios.post(`${API_URL}/auth/login`, loginForm)
       handleAuthSuccess(data)
       showToast('Welcome back!', 'success')
     } catch (error) {
@@ -757,18 +682,12 @@ function App() {
   const register = async (e) => {
     e.preventDefault()
     try {
-      if (!apiUrl) {
-        showToast('Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.', 'error')
-        setShowSettingsPage(true)
-        return
-      }
-      
-      const { data } = await axios.post(`${getFullApiUrl()}/auth/register`, registerForm)
+      const { data } = await axios.post(`${API_URL}/auth/register`, registerForm)
       
       if (!data.token && !data.data?.token && !data.accessToken) {
         showToast('Account created! Logging you in...', 'success')
         try {
-          const loginResponse = await axios.post(`${getFullApiUrl()}/auth/login`, {
+          const loginResponse = await axios.post(`${API_URL}/auth/login`, {
             email: registerForm.email,
             password: registerForm.password
           })
@@ -812,13 +731,16 @@ function App() {
 
   // === LOGOUT ===
   const logout = () => {
-    localStorage.clear()
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    
     setToken(null)
     setUser(null)
     setMessages([])
     setSelectedUser(null)
     setUsers([])
     setConnectionStatus('disconnected')
+    
     if (connection) {
       connection.stop().catch(err => console.error('Logout connection stop error:', err))
     }
@@ -826,35 +748,6 @@ function App() {
 
   // === LOGIN/REGISTER SCREEN ===
   if (!token) {
-    // Show settings page if no API URL configured or if explicitly requested
-    if (showSettingsPage || !apiUrl) {
-      return (
-        <div className="container">
-          {toast && (
-            <div className={`toast toast-${toast.type}`}>
-              <div className="toast-icon">
-                {toast.type === 'success' && <CheckCircle2 size={20} />}
-                {toast.type === 'error' && <XCircle size={20} />}
-                {toast.type === 'info' && <Info size={20} />}
-              </div>
-              <span>{toast.message}</span>
-            </div>
-          )}
-          <SettingsPage
-            onClose={() => {
-              setShowSettingsPage(false)
-              if (!apiUrl) {
-                // Keep showing settings if still no API URL
-                setTimeout(() => setShowSettingsPage(true), 100)
-              }
-            }}
-            onConfigChange={handleConfigChange}
-            showToast={showToast}
-          />
-        </div>
-      )
-    }
-    
     return (
       <div className="login-container">
         {toast && (
@@ -872,14 +765,6 @@ function App() {
           <div className="login-logo">
             <img src="/logo.png" alt="Chatter Logo" />
           </div>
-          <button 
-            type="button"
-            onClick={() => setShowSettingsPage(true)} 
-            className="login-settings-btn"
-            title="Configure Backend URL"
-          >
-            <Settings size={18} />
-          </button>
           <h2>{isRegistering ? 'Create Account' : 'Welcome Back'}</h2>
           <form onSubmit={isRegistering ? register : login}>
             {isRegistering ? (
@@ -942,14 +827,6 @@ function App() {
     )
   }
 
-  // === CHECK CONFIG ON MOUNT ===
-  useEffect(() => {
-    if (!apiUrl && !token) {
-      // Show settings page if no config and not logged in
-      setShowSettingsPage(true)
-    }
-  }, [apiUrl, token])
-
   // === MAIN CHAT INTERFACE ===
   return (
     <div className="container">
@@ -961,16 +838,6 @@ function App() {
             {toast.type === 'info' && <Info size={20} />}
           </div>
           <span>{toast.message}</span>
-        </div>
-      )}
-      
-      {!apiUrl && (
-        <div className="config-warning">
-          <Info size={20} />
-          <span>Backend URL yapılandırılmamış. Lütfen ayarlardan yapılandırın.</span>
-          <button onClick={() => setShowSettingsPage(true)} className="config-warning-btn">
-            Ayarlara Git
-          </button>
         </div>
       )}
 
@@ -999,10 +866,6 @@ function App() {
             }} className="profile-btn">
               <User size={18} />
               <span>Profil</span>
-            </button>
-            <button onClick={() => setShowSettingsPage(true)} className="settings-btn">
-              <Settings size={18} />
-              <span>Ayarlar</span>
             </button>
             <button onClick={logout} className="logout-btn">
               <LogOut size={18} />
@@ -1053,7 +916,7 @@ function App() {
             userId={viewProfileUserId}
             currentUserId={user?.id}
             token={token}
-            API_URL={apiUrl}
+            API_URL={API_URL}
             onUpdate={(updatedUser) => {
               setUser(updatedUser)
               localStorage.setItem('user', JSON.stringify(updatedUser))
@@ -1149,7 +1012,7 @@ function App() {
                       <div key={att.id} style={{ marginBottom: 10 }}>
                         {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
                           <img 
-                            src={`${apiUrl}${att.fileUrl}`} 
+                            src={`${BACKEND_URL}${att.fileUrl}`} 
                             alt={att.fileName}
                             style={{
                               maxWidth: '100%',
@@ -1158,11 +1021,11 @@ function App() {
                               objectFit: 'cover',
                               cursor: 'pointer'
                             }}
-                            onClick={() => window.open(`${apiUrl}${att.fileUrl}`, '_blank')}
+                            onClick={() => window.open(`${BACKEND_URL}${att.fileUrl}`, '_blank')}
                           />
                         ) : (
                           <a 
-                            href={`${apiUrl}${att.fileUrl}`} 
+                            href={`${BACKEND_URL}${att.fileUrl}`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="file-attachment"
