@@ -9,6 +9,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Safe area support for notched phones */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .active-call-screen {
@@ -29,6 +31,8 @@
   padding: 15px 30px;
   border-radius: 30px;
   backdrop-filter: blur(10px);
+  /* Safe area for notched phones */
+  top: max(20px, env(safe-area-inset-top));
 }
 
 .call-info {
@@ -61,14 +65,21 @@
 
 .local-video {
   position: absolute;
-  bottom: 20px;
+  bottom: 120px;
   right: 20px;
   width: 200px;
   height: 150px;
-  border-radius: 10px;
-  border: 2px solid #667eea;
+  border-radius: 16px;
+  border: 3px solid #667eea;
   object-fit: cover;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  /* Allow dragging on touch */
+  touch-action: none;
+  transition: transform 0.2s ease;
+}
+
+.local-video:active {
+  transform: scale(0.95);
 }
 
 .audio-call-placeholder {
@@ -94,6 +105,7 @@
   font-weight: bold;
   margin-bottom: 20px;
   animation: pulse 2s infinite;
+  box-shadow: 0 0 60px rgba(255, 255, 255, 0.2);
 }
 
 .audio-label {
@@ -110,6 +122,8 @@
   display: flex;
   gap: 20px;
   z-index: 10;
+  /* Safe area for bottom notch */
+  bottom: max(40px, calc(env(safe-area-inset-bottom) + 20px));
 }
 
 .control-button {
@@ -125,11 +139,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  color: white;
+  /* Better touch targets */
+  -webkit-tap-highlight-color: transparent;
 }
 
 .control-button:hover {
   transform: scale(1.1);
   background: rgba(255, 255, 255, 0.3);
+}
+
+.control-button:active {
+  transform: scale(0.95);
 }
 
 .control-button.active {
@@ -148,6 +169,10 @@
   transform: scale(1.1) rotate(135deg);
 }
 
+.control-button.end-call:active {
+  transform: scale(0.95) rotate(135deg);
+}
+
 @keyframes pulse {
   0%, 100% {
     transform: scale(1);
@@ -159,12 +184,89 @@
   }
 }
 
-@media (max-width: 768px) {
+/* === MOBILE PHONES (Portrait) === */
+@media (max-width: 480px) {
+  .call-header {
+    padding: 12px 20px;
+    border-radius: 20px;
+    max-width: calc(100% - 32px);
+  }
+
+  .call-info h3 {
+    font-size: 16px;
+  }
+
+  .call-duration {
+    font-size: 13px;
+  }
+
   .local-video {
+    width: 100px;
+    height: 140px;
+    bottom: 140px;
+    right: 12px;
+    border-radius: 12px;
+    border-width: 2px;
+  }
+
+  .audio-avatar {
     width: 120px;
-    height: 90px;
-    bottom: 100px;
-    right: 10px;
+    height: 120px;
+    font-size: 48px;
+  }
+
+  .audio-label {
+    font-size: 18px;
+  }
+
+  .call-controls {
+    gap: 16px;
+    padding: 0 16px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .control-button {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
+
+  .control-button.end-call {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+  }
+}
+
+/* === MOBILE LANDSCAPE === */
+@media (max-width: 812px) and (orientation: landscape) {
+  .call-header {
+    top: 10px;
+    padding: 10px 20px;
+  }
+
+  .local-video {
+    width: 140px;
+    height: 100px;
+    bottom: 80px;
+    right: 16px;
+  }
+
+  .audio-avatar {
+    width: 100px;
+    height: 100px;
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+
+  .audio-label {
+    font-size: 16px;
+  }
+
+  .call-controls {
+    bottom: 20px;
+    gap: 24px;
   }
 
   .control-button {
@@ -174,8 +276,40 @@
   }
 
   .control-button.end-call {
-    width: 60px;
-    height: 60px;
-    font-size: 24px;
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
+}
+
+/* === TABLETS === */
+@media (min-width: 481px) and (max-width: 1024px) and (orientation: portrait) {
+  .local-video {
+    width: 180px;
+    height: 240px;
+    bottom: 140px;
+    border-radius: 14px;
+  }
+
+  .audio-avatar {
+    width: 180px;
+    height: 180px;
+    font-size: 72px;
+  }
+
+  .call-controls {
+    gap: 24px;
+  }
+
+  .control-button {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+  }
+
+  .control-button.end-call {
+    width: 72px;
+    height: 72px;
+    font-size: 30px;
   }
 }

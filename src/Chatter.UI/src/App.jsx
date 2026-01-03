@@ -72,6 +72,9 @@ function App() {
   const loginEmailRef = useRef(null)
   const registerUsernameRef = useRef(null)
   const pendingNotificationsRef = useRef({}) // Store pending notifications per user
+  const sidebarRef = useRef(null)
+  const touchStartXRef = useRef(0)
+  const touchStartYRef = useRef(0)
 
   // === TOAST NOTIFICATION ===
   const showToast = useCallback((message, type = 'info') => {
@@ -341,6 +344,42 @@ function App() {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // === SWIPE GESTURE FOR SIDEBAR (Mobile) ===
+  useEffect(() => {
+    if (!isMobile) return
+
+    const handleTouchStart = (e) => {
+      touchStartXRef.current = e.touches[0].clientX
+      touchStartYRef.current = e.touches[0].clientY
+    }
+
+    const handleTouchEnd = (e) => {
+      const touchEndX = e.changedTouches[0].clientX
+      const touchEndY = e.changedTouches[0].clientY
+      const diffX = touchEndX - touchStartXRef.current
+      const diffY = touchEndY - touchStartYRef.current
+      
+      // Only trigger if horizontal swipe is dominant (not scrolling)
+      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 80) {
+        if (diffX > 0 && touchStartXRef.current < 50) {
+          // Swipe right from left edge - open sidebar
+          setIsMobileSidebarOpen(true)
+        } else if (diffX < 0 && isMobileSidebarOpen) {
+          // Swipe left - close sidebar
+          setIsMobileSidebarOpen(false)
+        }
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true })
+    document.addEventListener('touchend', handleTouchEnd, { passive: true })
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [isMobile, isMobileSidebarOpen])
 
   // === WEBRTC HOOK ===
   const {
@@ -1096,6 +1135,14 @@ function App() {
           </div>
           <span>{toast.message}</span>
         </div>
+      )}
+
+      {/* Mobile sidebar backdrop */}
+      {isMobile && (
+        <div 
+          className={`sidebar-backdrop ${isMobileSidebarOpen ? 'visible' : ''}`}
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
       )}
 
       <div className={`sidebar ${isMobile && !isMobileSidebarOpen ? 'mobile-hidden' : ''}`}>

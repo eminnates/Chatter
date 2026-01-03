@@ -5,7 +5,8 @@ import './IncomingCallModal.css';
 const IncomingCallModal = ({ call, onAccept, onDecline }) => {
   if (!call) return null;
 
-  const isVideoCall = call.type === 2;
+  // Handle both integer (1, 2) and string ('Audio', 'Video') enum values
+  const isVideoCall = call.type === 2 || call.type === 'Video' || call.type === 'video';
   const callType = isVideoCall ? 'Video' : 'Voice';
 
   return (

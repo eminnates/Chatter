@@ -77,7 +77,8 @@ const ActiveCallScreen = ({
     setIsVideoOff(!enabled);
   };
 
-  const isVideoCall = activeCall?.type === 2;
+  // Handle both integer (1, 2) and string ('Audio', 'Video') enum values
+  const isVideoCall = activeCall?.type === 2 || activeCall?.type === 'Video' || activeCall?.type === 'video';
 
   return (
     <div className="active-call-overlay">

@@ -4,78 +4,101 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
   animation: fadeIn 0.3s ease;
+  /* Safe area support */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  backdrop-filter: blur(8px);
 }
 
 .incoming-call-modal {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px;
+  border-radius: 24px;
   padding: 40px;
   text-align: center;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   min-width: 300px;
+  max-width: 90%;
+  margin: 20px;
 }
 
 .call-icon {
   font-size: 80px;
   margin-bottom: 20px;
-  animation: pulse 1.5s infinite;
+  animation: ring 1.5s infinite;
 }
 
 .incoming-call-modal h2 {
   color: white;
   margin: 0 0 10px 0;
   font-size: 24px;
+  font-weight: 600;
 }
 
 .caller-name {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 20px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 22px;
   margin: 10px 0 30px 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .call-buttons {
   display: flex;
-  gap: 15px;
+  gap: 20px;
   justify-content: center;
 }
 
 .call-buttons button {
-  padding: 15px 30px;
+  padding: 18px 32px;
   border: none;
   border-radius: 50px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
-  min-width: 120px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .accept-button {
   background: #10b981;
   color: white;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
 }
 
 .accept-button:hover {
   background: #059669;
   transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.5);
+}
+
+.accept-button:active {
+  transform: scale(0.98);
 }
 
 .decline-button {
   background: #ef4444;
   color: white;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
 }
 
 .decline-button:hover {
   background: #dc2626;
   transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5);
+}
+
+.decline-button:active {
+  transform: scale(0.98);
 }
 
 @keyframes fadeIn {
@@ -89,20 +112,100 @@
 
 @keyframes slideUp {
   from {
-    transform: translateY(50px);
+    transform: translateY(80px) scale(0.9);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
-@keyframes pulse {
+@keyframes ring {
   0%, 100% {
-    transform: scale(1);
+    transform: scale(1) rotate(0deg);
+  }
+  10%, 30% {
+    transform: scale(1.1) rotate(-10deg);
+  }
+  20%, 40% {
+    transform: scale(1.1) rotate(10deg);
   }
   50% {
-    transform: scale(1.1);
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* === MOBILE PHONES === */
+@media (max-width: 480px) {
+  .incoming-call-modal {
+    padding: 32px 24px;
+    border-radius: 20px;
+    width: calc(100% - 32px);
+    min-width: auto;
+  }
+
+  .call-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+  }
+
+  .incoming-call-modal h2 {
+    font-size: 20px;
+  }
+
+  .caller-name {
+    font-size: 20px;
+    margin: 8px 0 24px 0;
+  }
+
+  .call-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .call-buttons button {
+    width: 100%;
+    padding: 16px 24px;
+    font-size: 15px;
+    min-width: auto;
+  }
+}
+
+/* === MOBILE LANDSCAPE === */
+@media (max-width: 812px) and (orientation: landscape) {
+  .incoming-call-modal {
+    padding: 24px 40px;
+    flex-direction: row;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    min-width: auto;
+    max-width: 600px;
+  }
+
+  .call-icon {
+    font-size: 48px;
+    margin-bottom: 0;
+  }
+
+  .incoming-call-modal h2 {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+
+  .caller-name {
+    font-size: 16px;
+    margin: 4px 0 16px 0;
+  }
+
+  .call-buttons {
+    gap: 12px;
+  }
+
+  .call-buttons button {
+    padding: 14px 24px;
+    font-size: 14px;
+    min-width: 110px;
   }
 }
