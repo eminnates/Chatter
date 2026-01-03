@@ -239,14 +239,15 @@ public class ChatHub : Hub
                 {
                     var sender = await _unitOfWork.Users.GetByIdAsync(senderId);
                     var senderName = sender?.FullName ?? sender?.UserName ?? "Someone";
-                    var messagePreview = messageDto.Content?.Length > 50 
-                        ? messageDto.Content.Substring(0, 50) + "..." 
+                    var messagePreview = messageDto.Content?.Length > 100 
+                        ? messageDto.Content.Substring(0, 100) + "..." 
                         : messageDto.Content ?? "New message";
+                    var notificationBody = $"{senderName}: {messagePreview}";
                     
                     await _pushNotificationService.SendPushNotificationToUserAsync(
                         request.ReceiverId.Value,
-                        senderName,
-                        messagePreview,
+                        "Chatter",
+                        notificationBody,
                         new Dictionary<string, string>
                         {
                             { "type", "message" },
@@ -320,6 +321,17 @@ public class ChatHub : Hub
             
             // Confirm to initiator
             await Clients.Caller.SendAsync("CallInitiated", callDto);
+            
+            // Send push notification for incoming call
+            var initiator = await _unitOfWork.Users.GetByIdAsync(initiatorId);
+            var initiatorName = initiator?.FullName ?? initiator?.UserName ?? "Someone";
+            var callTypeText = callType == 0 ? "sesli" : "görüntülü";
+            
+            await _pushNotificationService.SendPushNotificationToUserAsync(
+                receiverId,
+                $"📞 {initiatorName}",
+                $"{callTypeText} arama yapıyor..."
+            );
             
             Console.WriteLine($"📞 Call initiated from {initiatorId} to {receiverId} (Type: {callType})");
         }

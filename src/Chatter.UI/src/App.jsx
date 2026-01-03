@@ -71,6 +71,7 @@ function App() {
   const messageInputRef = useRef(null)
   const loginEmailRef = useRef(null)
   const registerUsernameRef = useRef(null)
+  const pendingNotificationsRef = useRef({}) // Store pending notifications per user
 
   // === TOAST NOTIFICATION ===
   const showToast = useCallback((message, type = 'info') => {
@@ -99,63 +100,96 @@ function App() {
     }
   }, [])
 
-  const showNotification = useCallback(async (title, body, icon) => {
+  const showNotification = useCallback(async (senderId, senderName, messageContent) => {
     if (Capacitor.isNativePlatform()) {
-      // Mobile: Use Capacitor Local Notifications
+      // Mobile: WhatsApp-style notifications - one per user, expandable
       try {
-        // Check permission first
         const permResult = await LocalNotifications.checkPermissions()
-        console.log('📱 Notification permission status:', permResult.display)
-        
         if (permResult.display !== 'granted') {
           const requestResult = await LocalNotifications.requestPermissions()
-          console.log('📱 Permission request result:', requestResult.display)
-          if (requestResult.display !== 'granted') {
-            console.log('📱 Notification permission denied')
-            return
+          if (requestResult.display !== 'granted') return
+        }
+        
+        // Store messages per user
+        if (!pendingNotificationsRef.current[senderId]) {
+          pendingNotificationsRef.current[senderId] = {
+            senderName: senderName,
+            messages: []
           }
         }
+        pendingNotificationsRef.current[senderId].messages.push(messageContent)
         
-        // Schedule immediate notification
-        const notificationId = Math.floor(Math.random() * 2147483647)
+        const userNotifications = pendingNotificationsRef.current[senderId]
+        const messageCount = userNotifications.messages.length
+        const allMessages = userNotifications.messages.slice(-10)
+        
+        // Consistent notification ID per sender
+        const notificationId = Math.abs(senderId.split('').reduce((a, b) => {
+          a = ((a << 5) - a) + b.charCodeAt(0)
+          return a & a
+        }, 0)) % 2147483647
+        
+        // WhatsApp style: Title = sender name, Body = latest message or count
+        const title = senderName
+        const body = messageCount === 1 
+          ? messageContent 
+          : `${messageCount} yeni mesaj`
+        
+        // Expanded view shows all messages
+        const largeBody = allMessages.join('\n')
+        
+        // Cancel and replace existing notification
+        try {
+          await LocalNotifications.cancel({ notifications: [{ id: notificationId }] })
+        } catch (e) {}
+        
         await LocalNotifications.schedule({
-          notifications: [
-            {
-              id: notificationId,
-              title: title,
-              body: body,
-              sound: 'default',
-              channelId: 'chatter-messages',
-              autoCancel: true
-            }
-          ]
+          notifications: [{
+            id: notificationId,
+            title: title,
+            body: body,
+            largeBody: largeBody,
+            summaryText: messageCount > 1 ? `${messageCount} mesaj` : undefined,
+            inboxList: messageCount > 1 ? allMessages : undefined,
+            sound: 'default',
+            channelId: 'chatter-messages',
+            autoCancel: true,
+            group: 'chatter-messages',
+            groupSummary: false
+          }]
         })
-        console.log('📱 Mobile notification scheduled:', title, 'id:', notificationId)
+        console.log('📱 Notification:', title, '-', body)
       } catch (err) {
-        console.error('📱 Mobile notification error:', err)
+        console.error('📱 Notification error:', err)
       }
     } else {
-      // Web: Use browser Notification API
-      if (!('Notification' in window)) return
-      
-      if (Notification.permission === 'granted') {
-        const notification = new Notification(title, {
-          body,
-          icon: icon || '/icon.png',
-          badge: '/icon.png',
-          tag: 'chatter-notification',
-          requireInteraction: false
-        })
-        
-        notification.onclick = () => {
-          window.focus()
-          notification.close()
-        }
-        
-        setTimeout(() => notification.close(), 5000)
-      } else if (Notification.permission === 'default') {
-        Notification.requestPermission()
+      // Web notifications
+      if (!('Notification' in window) || Notification.permission !== 'granted') {
+        if (Notification.permission === 'default') Notification.requestPermission()
+        return
       }
+      
+      if (!pendingNotificationsRef.current[senderId]) {
+        pendingNotificationsRef.current[senderId] = { senderName, messages: [] }
+      }
+      pendingNotificationsRef.current[senderId].messages.push(messageContent)
+      
+      const userNotifications = pendingNotificationsRef.current[senderId]
+      const messageCount = userNotifications.messages.length
+      
+      const notification = new Notification(senderName, {
+        body: messageCount === 1 ? messageContent : `${messageCount} yeni mesaj`,
+        icon: '/icon.png',
+        tag: `chatter-${senderId}`,
+        renotify: true
+      })
+      
+      notification.onclick = () => {
+        window.focus()
+        notification.close()
+        delete pendingNotificationsRef.current[senderId]
+      }
+      setTimeout(() => notification.close(), 5000)
     }
   }, [])
 
@@ -220,11 +254,9 @@ function App() {
           
           // Listen for push notifications received
           PushNotifications.addListener('pushNotificationReceived', (notification) => {
-            console.log('📱 Push notification received:', notification)
-            // Show local notification when app is in foreground
-            if (isAppActiveRef.current) {
-              showNotification(notification.title || 'New Message', notification.body || '')
-            }
+            console.log('📱 Push notification received (foreground - ignored for WhatsApp behavior):', notification)
+            // WhatsApp behavior: Don't show notification when app is in foreground
+            // FCM will automatically show notification when app is in background
           })
           
           // Listen for notification action (when user taps notification)
@@ -541,13 +573,19 @@ function App() {
         }
         
         // Show notification for incoming messages (not from me)
-        if (!isMyMessage) {
-          // Always show notification for test - remove condition temporarily
-          const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
-          const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
-          const messagePreview = message.content?.substring(0, 50) || 'New message';
-          console.log('📱 ALWAYS showing notification:', senderName, messagePreview);
-          showNotification(senderName, messagePreview);
+        // Only on WEB platform - native uses FCM push notifications
+        // WhatsApp behavior: No notification when app is in foreground on native
+        if (!isMyMessage && (!isFromSelectedUser || !isAppActiveRef.current)) {
+          // Only show local notification on web platform
+          if (!Capacitor.isNativePlatform()) {
+            const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
+            const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
+            const messageContent = message.content?.substring(0, 100) || 'New message';
+            console.log('📱 Showing notification for:', senderName, messageContent);
+            showNotification(senderId, senderName, messageContent);
+          } else {
+            console.log('📱 Native platform - skipping local notification (FCM handles background)');
+          }
         }
 
         // Sidebar Güncelleme
@@ -651,10 +689,30 @@ function App() {
   }, [token, loadUsers, markAsRead, showToast])
 
   // === SELECT USER ===
-  const handleSelectUser = useCallback((u) => {
+  const handleSelectUser = useCallback(async (u) => {
     setSelectedUser(u)
     setIsTyping(false)
     markAsRead(u.id)
+    
+    // Clear pending notifications for this user
+    if (pendingNotificationsRef.current[u.id]) {
+      delete pendingNotificationsRef.current[u.id]
+      
+      // Cancel the notification on mobile
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const notificationId = Math.abs(u.id.split('').reduce((a, b) => {
+            a = ((a << 5) - a) + b.charCodeAt(0)
+            return a & a
+          }, 0)) % 2147483647
+          await LocalNotifications.cancel({ notifications: [{ id: notificationId }] })
+          console.log('📱 Cancelled notification for user:', u.id)
+        } catch (e) {
+          // Ignore if notification doesn't exist
+        }
+      }
+    }
+    
     // Close mobile sidebar when user selected
     if (isMobile) {
       setIsMobileSidebarOpen(false)
