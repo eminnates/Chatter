@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import * as signalR from '@microsoft/signalr'
 import axios from 'axios'
 import './index.css'
+import logoImage from './assets/logo.png'
 import { useWebRTC } from './hooks/useWebRTC'
 import IncomingCallModal from './components/IncomingCallModal'
 import ActiveCallScreen from './components/ActiveCallScreen'
@@ -1245,7 +1246,7 @@ function App() {
 
         <div className="login-box">
           <div className="login-logo">
-            <img src="/logo.png" alt="Chatter Logo" />
+            <img src={logoImage} alt="Chatter Logo" />
           </div>
           <h2>{isRegistering ? 'Join the conversation 🎉' : 'Hey there! 👋'}</h2>
           <form onSubmit={isRegistering ? register : login}>

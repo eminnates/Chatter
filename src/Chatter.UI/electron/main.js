@@ -7,19 +7,29 @@ let tray = null;
 
 function createWindow() {
   // Determine icon path based on environment
-  const iconPath = isDev 
-    ? path.join(__dirname, '../public/icon.png')
-    : path.join(process.resourcesPath, 'public/icon.png');
+  let iconPath;
+  if (isDev) {
+    iconPath = path.join(__dirname, '../public/icon.png');
+  } else {
+    // In production, try to find the icon in the dist folder
+    iconPath = path.join(__dirname, '../dist/icon.png');
+  }
+  
+  console.log('App Icon Path:', iconPath);
 
+  // Create native image for the icon
+  const appIcon = nativeImage.createFromPath(iconPath);
+
+  // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: iconPath,
+    icon: appIcon,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
-    show: false, // Don't show until ready
+    show: false,
   });
 
   // Show window when ready to prevent flickering
@@ -60,7 +70,10 @@ function createWindow() {
 
 function createTray() {
   // Create tray icon
-  const iconPath = path.join(__dirname, '../public/icon-tray.png');
+  const iconPath = isDev 
+    ? path.join(__dirname, '../public/icon-tray.png')
+    : path.join(__dirname, '../dist/icon-tray.png');
+    
   let trayIcon;
   
   try {

@@ -1,7 +1,7 @@
 {
   "name": "chatter",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.2",
   "description": "Chatter Real-time Chat Application",
   "author": {
     "name": "Emin Ates",
@@ -31,6 +31,7 @@
       "electron/main.js",
       "electron/preload.js"
     ],
+    "icon": "build/icon.png",
     "win": {
       "target": [
         {
@@ -40,14 +41,19 @@
           ]
         }
       ],
-      "icon": "public/icon.ico"
+      "icon": "build/icon.png"
     },
     "linux": {
+      "icon": "build/icons",
       "target": [
         "AppImage",
         "pacman",
         "deb"
       ],
+      "executableName": "chatter",
+      "desktop": {
+        "Icon": "chatter"
+      },
       "maintainer": "Emin Ates <mhmtmn1800@gmail.com>",
       "category": "Chat"
     },
