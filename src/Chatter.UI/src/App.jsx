@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import * as signalR from '@microsoft/signalr'
 import axios from 'axios'
 import './index.css'
@@ -13,20 +13,36 @@ import {
   Maximize2, Loader
 } from 'lucide-react'
 import { App as CapacitorApp } from '@capacitor/app'
+import { StatusBar, Style } from '@capacitor/status-bar'
+import { Keyboard, KeyboardResize } from '@capacitor/keyboard'
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { PushNotifications } from '@capacitor/push-notifications'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
+import { NavigationBar } from '@hugotomazi/capacitor-navigation-bar'
+import { SplashScreen } from '@capacitor/splash-screen';
+
 
 // === HARDCODED BACKEND CONFIG ===
 const BACKEND_URL = 'https://aretha-intercompany-corinna.ngrok-free.dev'
 const API_URL = BACKEND_URL + '/api'
 const HUB_URL = BACKEND_URL + '/hubs/chat'
 
-// Initialize axios defaults
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
 
-// SecureImage component - loads images with ngrok bypass header
-const SecureImage = ({ src, alt, className, onClick }) => {
+// === HAPTIC FEEDBACK HELPER ===
+const triggerHaptic = async (style = ImpactStyle.Light) => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Haptics.impact({ style })
+    } catch (e) {
+      console.log('Haptics not available')
+    }
+  }
+}
+
+// SecureImage component
+const SecureImage = memo(({ src, alt, className, onClick }) => {
   const [imageSrc, setImageSrc] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -39,9 +55,7 @@ const SecureImage = ({ src, alt, className, onClick }) => {
     setError(false)
 
     fetch(src, {
-      headers: {
-        'ngrok-skip-browser-warning': 'true'
-      }
+      headers: { 'ngrok-skip-browser-warning': 'true' }
     })
       .then(response => {
         if (!response.ok) throw new Error('Failed to load image')
@@ -84,17 +98,103 @@ const SecureImage = ({ src, alt, className, onClick }) => {
     )
   }
 
-  return (
-    <img 
-      src={imageSrc} 
-      alt={alt} 
-      className={className} 
-      onClick={onClick}
-    />
-  )
-}
+  return <img src={imageSrc} alt={alt} className={className} onClick={onClick} />
+})
 
-// === SOUND EFFECTS SYSTEM ===
+// === OPTIMIZED USER LIST ITEM ===
+const UserListItem = memo(({ user, isSelected, onClick, onContextMenu, unreadCount, isOnline }) => {
+  return (
+    <div 
+      className={`user-item ${isSelected ? 'active' : ''}`}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <div className="user-avatar">
+        {(user.fullName?.[0] || user.userName?.[0] || '?').toUpperCase()}
+      </div>
+      <div className="user-row">
+        <div className="user-info">
+          <span className="user-name">{user.fullName || user.userName}</span>
+          {isOnline && <span className="online-dot" title="Online" />}
+        </div>
+        {unreadCount > 0 && (
+          <div className="notification-badge">{unreadCount}</div>
+        )}
+      </div>
+    </div>
+  )
+})
+
+// === OPTIMIZED MESSAGE ITEM ===
+const MessageItem = memo(({ msg, currentUserId, onImageClick }) => {
+  if (msg.type === 'System') {
+    const isDeclined = msg.content.includes('declined');
+    const isMissed = msg.content.includes('Missed');
+    const isNegative = isDeclined || isMissed;
+    
+    return (
+      <div className="system-message">
+        <div className={`system-message-content ${isNegative ? 'negative' : ''}`}>
+          <span className="call-icon">
+            {msg.content.includes('Video') ? <Video size={16} /> : <Phone size={16} />}
+          </span>
+          <span className="call-text">{msg.content}</span>
+        </div>
+        <div className="system-message-time">
+          {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`message ${msg.senderId === currentUserId ? 'sent' : 'received'}`}>
+      <div className="msg-bubble">
+        {msg.attachments?.map(att => (
+          <div key={att.id} style={{ marginBottom: 10 }}>
+            {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
+              <div 
+                className="msg-image-container"
+                onClick={() => onImageClick(`${BACKEND_URL}${att.fileUrl}`)}
+              >
+                <SecureImage 
+                  src={`${BACKEND_URL}${att.fileUrl}`} 
+                  alt={att.fileName}
+                  className="msg-image"
+                />
+                <div className="msg-image-overlay">
+                  <Maximize2 size={24} />
+                </div>
+              </div>
+            ) : (
+              <a 
+                href={`${BACKEND_URL}${att.fileUrl}`} 
+                target="_blank" 
+                rel="noreferrer"
+                className="file-attachment"
+              >
+                <File size={18} />
+                <span>{att.fileName}</span>
+              </a>
+            )}
+          </div>
+        ))}
+        {msg.content && <p style={{ margin: 0 }}>{msg.content}</p>}
+      </div>
+      
+      <div className="msg-time">
+        {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {msg.senderId === currentUserId && (
+          <span className={`read-status ${msg.isRead ? 'read' : 'sent'}`}>
+            {msg.isRead ? <CheckCheck size={16} /> : <Check size={16} />}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+})
+
+// === SOUND EFFECTS ===
 const createSoundEffect = (frequency, duration, type = 'sine', volume = 0.3) => {
   return () => {
     try {
@@ -118,27 +218,22 @@ const createSoundEffect = (frequency, duration, type = 'sine', volume = 0.3) => 
   }
 }
 
-// Warm, friendly sound effects
 const sounds = {
   messageSent: () => {
-    // Gentle "whoosh" - ascending tone
     const play = createSoundEffect(440, 0.15, 'sine', 0.2)
     play()
     setTimeout(() => createSoundEffect(587, 0.1, 'sine', 0.15)(), 50)
   },
   messageReceived: () => {
-    // Soft "pop" - descending tone
     const play = createSoundEffect(587, 0.12, 'sine', 0.25)
     play()
     setTimeout(() => createSoundEffect(440, 0.15, 'sine', 0.2)(), 60)
   },
   notification: () => {
-    // Gentle chime
     createSoundEffect(523, 0.2, 'sine', 0.2)()
     setTimeout(() => createSoundEffect(659, 0.25, 'sine', 0.15)(), 100)
   },
   connect: () => {
-    // Happy connection sound
     createSoundEffect(392, 0.1, 'sine', 0.15)()
     setTimeout(() => createSoundEffect(523, 0.1, 'sine', 0.15)(), 80)
     setTimeout(() => createSoundEffect(659, 0.15, 'sine', 0.2)(), 160)
@@ -146,7 +241,7 @@ const sounds = {
 }
 
 function App() {
-  // === AUTH STATES ===
+  // === STATES ===
   const [token, setToken] = useState(() => localStorage.getItem('token'))
   const [user, setUser] = useState(() => {
     try {
@@ -156,11 +251,9 @@ function App() {
     }
   })
   
-  // === THEME & SOUND STATES ===
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('soundEnabled') !== 'false')
   
-  // === CHAT & UI STATES ===
   const [users, setUsers] = useState([]) 
   const [selectedUser, setSelectedUser] = useState(null)
   const [messages, setMessages] = useState([])
@@ -168,7 +261,7 @@ function App() {
   const [connection, setConnection] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [selectedFile, setSelectedFile] = useState(null)
-  const [lightboxImage, setLightboxImage] = useState(null) // For fullscreen image viewer
+  const [lightboxImage, setLightboxImage] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [isCompressing, setIsCompressing] = useState(false)
@@ -179,9 +272,8 @@ function App() {
   const [viewProfileUserId, setViewProfileUserId] = useState(null)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  const [isAppActive, setIsAppActive] = useState(true) // Track if app is in foreground
+  const [isAppActive, setIsAppActive] = useState(true)
   
-  // === LOGIN & REGISTER STATES ===
   const [isRegistering, setIsRegistering] = useState(false)
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [registerForm, setRegisterForm] = useState({
@@ -201,24 +293,36 @@ function App() {
   const messageInputRef = useRef(null)
   const loginEmailRef = useRef(null)
   const registerUsernameRef = useRef(null)
-  const pendingNotificationsRef = useRef({}) // Store pending notifications per user
+  const pendingNotificationsRef = useRef({})
   const sidebarRef = useRef(null)
   const touchStartXRef = useRef(0)
   const touchStartYRef = useRef(0)
+  // 🔄 1. STATE REFS (Kritik: Listener'ların güncel veriyi görmesi için)
+  // Bu ref'ler sayesinde useEffect'leri tekrar tekrar çalıştırmak zorunda kalmayız.
+  const connectionRef = useRef(connection);
+  const tokenRef = useRef(token);
+  
+  // UI State Ref'leri (Back Button için gerekli)
+  const lightboxImageRef = useRef(lightboxImage);
+  const isMobileSidebarOpenRef = useRef(isMobileSidebarOpen);
+  const showProfilePageRef = useRef(showProfilePage);
 
-  // === TOAST NOTIFICATION ===
+  // === TOAST ===
   const showToast = useCallback((message, type = 'info') => {
     let displayMessage = message
     if (message.length > 150) {
       displayMessage = message.substring(0, 150) + '...'
     }
     setToast({ message: displayMessage, type })
+    
+    if (type === 'error') {
+      triggerHaptic(ImpactStyle.Medium)
+    }
   }, [])
 
-  // === NOTIFICATION FUNCTIONS ===
+  // === NOTIFICATIONS ===
   const requestNotificationPermission = useCallback(async () => {
     if (Capacitor.isNativePlatform()) {
-      // Mobile: Request local notification permission
       try {
         const result = await LocalNotifications.requestPermissions()
         console.log('📱 Mobile notification permission:', result.display)
@@ -226,7 +330,6 @@ function App() {
         console.error('Mobile notification permission error:', err)
       }
     } else {
-      // Web: Request browser notification permission
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission()
       }
@@ -234,8 +337,9 @@ function App() {
   }, [])
 
   const showNotification = useCallback(async (senderId, senderName, messageContent) => {
+    await triggerHaptic(ImpactStyle.Light)
+    
     if (Capacitor.isNativePlatform()) {
-      // Mobile: WhatsApp-style notifications - one per user, expandable
       try {
         const permResult = await LocalNotifications.checkPermissions()
         if (permResult.display !== 'granted') {
@@ -243,7 +347,6 @@ function App() {
           if (requestResult.display !== 'granted') return
         }
         
-        // Store messages per user
         if (!pendingNotificationsRef.current[senderId]) {
           pendingNotificationsRef.current[senderId] = {
             senderName: senderName,
@@ -256,22 +359,15 @@ function App() {
         const messageCount = userNotifications.messages.length
         const allMessages = userNotifications.messages.slice(-10)
         
-        // Consistent notification ID per sender
         const notificationId = Math.abs(senderId.split('').reduce((a, b) => {
           a = ((a << 5) - a) + b.charCodeAt(0)
           return a & a
         }, 0)) % 2147483647
         
-        // WhatsApp style: Title = sender name, Body = latest message or count
         const title = senderName
-        const body = messageCount === 1 
-          ? messageContent 
-          : `${messageCount} yeni mesaj`
-        
-        // Expanded view shows all messages
+        const body = messageCount === 1 ? messageContent : `${messageCount} yeni mesaj`
         const largeBody = allMessages.join('\n')
         
-        // Cancel and replace existing notification
         try {
           await LocalNotifications.cancel({ notifications: [{ id: notificationId }] })
         } catch (e) {}
@@ -296,7 +392,6 @@ function App() {
         console.error('📱 Notification error:', err)
       }
     } else {
-      // Web notifications
       if (!('Notification' in window) || Notification.permission !== 'granted') {
         if (Notification.permission === 'default') Notification.requestPermission()
         return
@@ -325,19 +420,24 @@ function App() {
       setTimeout(() => notification.close(), 5000)
     }
   }, [])
+  useEffect(() => {
+    connectionRef.current = connection;
+    tokenRef.current = token;
+    lightboxImageRef.current = lightboxImage;
+    isMobileSidebarOpenRef.current = isMobileSidebarOpen;
+    showProfilePageRef.current = showProfilePage;
+  }, [connection, token, lightboxImage, isMobileSidebarOpen, showProfilePage]);
 
-  // Request notification permission and create channel on mount
   useEffect(() => {
     const initNotifications = async () => {
       if (Capacitor.isNativePlatform()) {
-        // Create notification channel for Android 8+
         try {
           await LocalNotifications.createChannel({
             id: 'chatter-messages',
             name: 'Chatter Messages',
             description: 'Notifications for new messages',
-            importance: 5, // Max importance
-            visibility: 1, // Public
+            importance: 5,
+            visibility: 1,
             sound: 'default',
             vibration: true
           })
@@ -346,9 +446,7 @@ function App() {
           console.error('Channel creation error:', err)
         }
         
-        // Setup Push Notifications for background messaging
         try {
-          // Request permission
           const permStatus = await PushNotifications.checkPermissions()
           console.log('📱 Push permission status:', permStatus.receive)
           
@@ -359,13 +457,10 @@ function App() {
             }
           }
           
-          // Register for push notifications
           await PushNotifications.register()
           
-          // Listen for registration success
           PushNotifications.addListener('registration', async (token) => {
             console.log('📱 FCM Token:', token.value)
-            // Send token to backend when user is logged in
             const storedToken = localStorage.getItem('token')
             if (storedToken) {
               try {
@@ -380,22 +475,16 @@ function App() {
             }
           })
           
-          // Listen for registration errors
           PushNotifications.addListener('registrationError', (error) => {
             console.error('📱 Push registration error:', error)
           })
           
-          // Listen for push notifications received
           PushNotifications.addListener('pushNotificationReceived', (notification) => {
-            console.log('📱 Push notification received (foreground - ignored for WhatsApp behavior):', notification)
-            // WhatsApp behavior: Don't show notification when app is in foreground
-            // FCM will automatically show notification when app is in background
+            console.log('📱 Push notification received:', notification)
           })
           
-          // Listen for notification action (when user taps notification)
           PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
             console.log('📱 Push notification tapped:', notification)
-            // Handle notification tap - could navigate to specific chat
           })
           
         } catch (err) {
@@ -405,77 +494,112 @@ function App() {
       requestNotificationPermission()
     }
     initNotifications()
-  }, [requestNotificationPermission, showNotification])
+  }, [requestNotificationPermission])
 
-  // === CAPACITOR APP LIFECYCLE - Handle background/foreground state ===
+// 📱 NATIVE LIFECYCLE & HARDWARE BACK BUTTON & KEYBOARD
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return
+    if (!Capacitor.isNativePlatform()) return;
 
-    const handleAppStateChange = CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
-      console.log(`📱 App state changed: ${isActive ? 'foreground' : 'background'}`)
+    let appStateListener = null;
+    let backButtonListener = null;
+
+    const setupNativeListeners = async () => {
       
-      // Update app active state
-      setIsAppActive(isActive)
-      isAppActiveRef.current = isActive
-      
-      if (!isActive && connection && connection.state === signalR.HubConnectionState.Connected) {
-        // App went to background - notify server user is going offline
-        try {
-          await connection.invoke('SetUserOffline')
-          console.log('👋 Sent offline status to server')
-        } catch (err) {
-          console.error('Error sending offline status:', err)
-        }
-      } else if (isActive && connection) {
-        // App came to foreground - reconnect if needed
-        if (connection.state !== signalR.HubConnectionState.Connected) {
-          try {
-            await connection.start()
-            console.log('✅ Reconnected to SignalR')
-            setConnectionStatus('connected')
-          } catch (err) {
-            console.error('Error reconnecting:', err)
+      // 1. KLAVYE AYARI (Senin kodundaki Native optimizations kısmı)
+      try {
+        await Keyboard.setResizeMode({ mode: KeyboardResize.Native });
+      } catch (e) { 
+        console.warn('Keyboard resize mode error', e); 
+      }
+
+      // 2. APP STATE (SignalR - Offline/Online Yönetimi)
+      appStateListener = await CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+        console.log(`📱 App state: ${isActive ? 'foreground' : 'background'}`);
+        setIsAppActive(isActive);
+        
+        const currentConn = connectionRef.current;
+        const currentToken = tokenRef.current;
+
+        if (!currentConn) return;
+
+        if (!isActive) {
+          // BACKGROUND: Fire and Forget
+          if (currentConn.state === signalR.HubConnectionState.Connected) {
+            currentConn.invoke('SetUserOffline')
+              .catch(err => console.warn('Offline status skipped:', err));
           }
         } else {
-          // Already connected, just notify server we're back online
-          try {
-            await connection.invoke('SetUserOnline')
-            console.log('👋 Sent online status to server')
-          } catch (err) {
-            console.error('Error sending online status:', err)
+          // FOREGROUND: Reconnect
+          if (currentConn.state === signalR.HubConnectionState.Disconnected) {
+            try {
+              await currentConn.start();
+              setConnectionStatus('connected');
+              await currentConn.invoke('SetUserOnline');
+              console.log('✅ Reconnected');
+            } catch (err) {
+              console.error('Reconnect failed:', err);
+              setConnectionStatus('failed');
+            }
+          } else if (currentConn.state === signalR.HubConnectionState.Connected) {
+            currentConn.invoke('SetUserOnline').catch(console.error);
           }
+          
+          if (currentToken) loadUsers(currentToken);
         }
-        // Refresh users list inline
-        if (token) {
-          try {
-            const { data } = await axios.get(`${API_URL}/user`, {
-              headers: { Authorization: `Bearer ${token}` }
-            })
-            const userList = Array.isArray(data) ? data : (data.data || [])
-            setUsers(userList)
-          } catch (err) {
-            console.error('Error refreshing users:', err)
-          }
-        }
-      }
-    })
+      });
 
+      // 3. HARDWARE BACK BUTTON (Geri Tuşu Yönetimi)
+      backButtonListener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        // State yerine REF kullanıyoruz (En güncel değeri okumak için)
+        if (lightboxImageRef.current) {
+          setLightboxImage(null);
+          return;
+        }
+        if (isMobileSidebarOpenRef.current) {
+          setIsMobileSidebarOpen(false);
+          return;
+        }
+        if (showProfilePageRef.current) {
+          setShowProfilePage(false);
+          return;
+        }
+        
+        // Modal yoksa ve geçmiş bittiyse uygulamadan çık
+        if (!canGoBack) {
+          CapacitorApp.exitApp();
+        } else {
+          window.history.back();
+        }
+      });
+    };
+
+    setupNativeListeners();
+
+    // CLEANUP: Sadece bu effect'in oluşturduğu listener'ları siliyoruz.
+    // 'removeAllListeners' KULLANMIYORUZ, çünkü o global temizlik yapar ve sistemi bozar.
     return () => {
-      handleAppStateChange.remove()
-    }
-  }, [connection, token])
+      if (appStateListener) appStateListener.remove();
+      if (backButtonListener) backButtonListener.remove();
+    };
+  }, []); // <--- BOŞ ARRAY: Sadece 1 kez çalışır, Ref'ler sayesinde hep güncel kalır.
 
-  // Detect mobile screen size
+// 🚀 5. SPLASH SCREEN & MOBILE DETECT
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768)
-    }
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+    // Splash
+    const hideSplash = async () => {
+      await SplashScreen.hide();
+    };
+    hideSplash();
 
-  // === SWIPE GESTURE FOR SIDEBAR (Mobile) ===
+    // Mobile Check
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Swipe gesture
   useEffect(() => {
     if (!isMobile) return
 
@@ -490,13 +614,10 @@ function App() {
       const diffX = touchEndX - touchStartXRef.current
       const diffY = touchEndY - touchStartYRef.current
       
-      // Only trigger if horizontal swipe is dominant (not scrolling)
       if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 80) {
         if (diffX > 0 && touchStartXRef.current < 50) {
-          // Swipe right from left edge - open sidebar
           setIsMobileSidebarOpen(true)
         } else if (diffX < 0 && isMobileSidebarOpen) {
-          // Swipe left - close sidebar
           setIsMobileSidebarOpen(false)
         }
       }
@@ -511,7 +632,31 @@ function App() {
     }
   }, [isMobile, isMobileSidebarOpen])
 
-  // === WEBRTC HOOK ===
+  // ⌨️ 4. KEYBOARD AUTO-SCROLL
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let keyboardShowListener = null;
+    let keyboardHideListener = null;
+
+    const setupKeyboard = async () => {
+      keyboardShowListener = await Keyboard.addListener('keyboardWillShow', () => {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 150); // Klavye animasyonu bitmesi için biraz süre ver
+      });
+    };
+
+    setupKeyboard();
+
+    return () => {
+      if (keyboardShowListener) keyboardShowListener.remove();
+      if (keyboardHideListener) keyboardHideListener.remove();
+    };
+  }, []);
+
+
+  // WebRTC
   const {
     localStream,
     remoteStream,
@@ -525,9 +670,7 @@ function App() {
     toggleVideo
   } = useWebRTC(connection, user?.id, showToast, showNotification)
 
-  // === CALL HANDLERS ===
   const handleInitiateCall = useCallback((receiverId, callType) => {
-    // Prevent calling yourself
     if (receiverId === user?.id) {
       showToast('You cannot call yourself.', 'error')
       return
@@ -537,60 +680,52 @@ function App() {
       showToast('You are already in an active call.', 'error')
       return
     }
+    
+    triggerHaptic(ImpactStyle.Medium)
     initiateCall(receiverId, callType)
   }, [activeCall, callStatus, initiateCall, showToast, user?.id])
 
-  // === SYNC SELECTED USER REF ===
-  useEffect(() => {
-    selectedUserRef.current = selectedUser
-  }, [selectedUser])
-  useEffect(() => {
-    userRef.current = user // User değiştikçe Ref'i güncelle
-  }, [user])
-  useEffect(() => {
-    usersRef.current = users // Users değiştikçe Ref'i güncelle
-  }, [users])
+  // Sync refs
+  useEffect(() => { selectedUserRef.current = selectedUser }, [selectedUser])
+  useEffect(() => { userRef.current = user }, [user])
+  useEffect(() => { usersRef.current = users }, [users])
 
-  // === THEME EFFECT ===
+  // Theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  // === SOUND EFFECT HELPER ===
   const playSound = useCallback((soundName) => {
     if (soundEnabled && sounds[soundName]) {
       sounds[soundName]()
     }
   }, [soundEnabled])
 
-  // === TOGGLE THEME ===
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
       const newTheme = prev === 'dark' ? 'light' : 'dark'
       return newTheme
     })
+    triggerHaptic(ImpactStyle.Light)
   }, [])
 
-  // === TOGGLE SOUND ===
   const toggleSound = useCallback(() => {
     setSoundEnabled(prev => {
       const newValue = !prev
       localStorage.setItem('soundEnabled', newValue.toString())
-      if (newValue) {
-        // Play a test sound when enabling
-        sounds.connect()
-      }
+      if (newValue) sounds.connect()
       return newValue
     })
+    triggerHaptic(ImpactStyle.Light)
   }, [])
 
-  // === AUTO SCROLL ===
+  // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
-  // === AUTO HIDE TOAST ===
+  // Toast auto-hide
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 5000)
@@ -598,7 +733,7 @@ function App() {
     }
   }, [toast])
 
-  // === AUTO FOCUS ON PAGE CHANGE ===
+  // Auto-focus
   useEffect(() => {
     if (!token) {
       setTimeout(() => {
@@ -611,7 +746,6 @@ function App() {
     }
   }, [token, isRegistering])
 
-  // === AUTO FOCUS WHEN USER SELECTED ===
   useEffect(() => {
     if (selectedUser && messageInputRef.current) {
       setTimeout(() => {
@@ -620,7 +754,7 @@ function App() {
     }
   }, [selectedUser])
 
-  // === MARK AS READ ===
+  // Mark as read
   const markAsRead = useCallback(async (targetUserId) => {
     if (!token) return
     try {
@@ -635,7 +769,7 @@ function App() {
     }
   }, [token])
 
-  // === LOAD USERS ===
+  // Load users
   const loadUsers = useCallback(async (activeToken, retryCount = 0) => {
     try {
       const { data } = await axios.get(`${API_URL}/user`, {
@@ -649,15 +783,14 @@ function App() {
         logout()
       } else if (retryCount < 3) {
         const delay = Math.min(1000 * Math.pow(2, retryCount), 5000)
-        console.log(`Retrying loadUsers in ${delay}ms...`)
         setTimeout(() => loadUsers(activeToken, retryCount + 1), delay)
       } else {
-        showToast('Failed to load users. Please refresh.', 'error')
+        showToast('Failed to load users.', 'error')
       }
     }
   }, [showToast])
 
-  // === LOAD MESSAGES ===
+  // Load messages
   const loadMessages = useCallback(async (userId) => {
     if (!token) return
     try {
@@ -685,10 +818,9 @@ function App() {
     }
   }, [token])
 
-  // === SIGNALR CONNECTION ===
+  // SignalR connection
   useEffect(() => {
     if (!token) {
-      // Clean up connection when logged out
       if (connection) {
         connection.stop()
         setConnection(null)
@@ -715,9 +847,8 @@ function App() {
         .configureLogging(signalR.LogLevel.Information)
         .build()
 
-      // Set keep-alive interval
-      newConnection.keepAliveIntervalInMilliseconds = 15000 // 15 seconds
-      newConnection.serverTimeoutInMilliseconds = 30000 // 30 seconds
+      newConnection.keepAliveIntervalInMilliseconds = 15000
+      newConnection.serverTimeoutInMilliseconds = 30000
 
       try {
         await newConnection.start()
@@ -727,107 +858,81 @@ function App() {
           setConnectionStatus('connected')
         }
 
-        // === RECEIVE MESSAGE ===
-      newConnection.on('ReceiveMessage', (message) => {
-        // 1. Backend'den hangi formatta (senderId/SenderId) gelirse gelsin veriyi al
-        const senderId = message.senderId || message.SenderId;
-        const receiverId = message.receiverId || message.ReceiverId;
-        const content = message.content || message.Content;
+        newConnection.on('ReceiveMessage', (message) => {
+          const senderId = message.senderId || message.SenderId;
+          const receiverId = message.receiverId || message.ReceiverId;
+          const content = message.content || message.Content;
 
-        const incomingSenderId = senderId?.toLowerCase();
-        const currentUserId = userRef.current?.id?.toLowerCase(); // Ref kullanıyoruz
-        const selectedUserId = selectedUserRef.current?.id?.toLowerCase();
+          const incomingSenderId = senderId?.toLowerCase();
+          const currentUserId = userRef.current?.id?.toLowerCase();
+          const selectedUserId = selectedUserRef.current?.id?.toLowerCase();
 
-        const isMyMessage = incomingSenderId === currentUserId;
-        const isFromSelectedUser = incomingSenderId === selectedUserId;
+          const isMyMessage = incomingSenderId === currentUserId;
+          const isFromSelectedUser = incomingSenderId === selectedUserId;
 
-        console.log('📨 SignalR Test:', { 
-          incomingSenderId, 
-          currentUserId, 
-          selectedUserId,
-          isMyMessage,
-          isFromSelectedUser 
-        });
+          if (isMyMessage || isFromSelectedUser) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === message.id)) return prev;
 
-        if (isMyMessage || isFromSelectedUser) {
-          setMessages(prev => {
-            // Mesaj zaten listede var mı? (Duplicate engelleme)
-            if (prev.some(m => m.id === message.id)) return prev;
+              const tempIndex = prev.findIndex(m => 
+                m.id.toString().startsWith('temp-') && m.content === content
+              );
 
-            // Optimistic Update: Geçici mesajı bul ve gerçek olanla değiştir
-            const tempIndex = prev.findIndex(m => 
-              m.id.toString().startsWith('temp-') && m.content === content
-            );
+              if (tempIndex !== -1 && isMyMessage) {
+                const updated = [...prev];
+                updated[tempIndex] = message;
+                return updated;
+              }
 
-            if (tempIndex !== -1 && isMyMessage) {
-              const updated = [...prev];
-              updated[tempIndex] = message;
-              return updated;
+              return [...prev, message];
+            });
+
+            if (!isMyMessage && isFromSelectedUser) {
+              playSound('messageReceived')
             }
 
-            return [...prev, message];
+            if (isFromSelectedUser && !isMyMessage && isAppActiveRef.current) {
+              markAsRead(senderId);
+              setIsTyping(false);
+            }
+          }
+          
+          if (!isMyMessage && (!isFromSelectedUser || !isAppActiveRef.current)) {
+            playSound('notification')
+            
+            if (!Capacitor.isNativePlatform()) {
+              const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
+              const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
+              const messageContent = message.content?.substring(0, 100) || 'New message';
+              showNotification(senderId, senderName, messageContent);
+            }
+          }
+
+          setUsers(prevUsers => {
+            const targetId = isMyMessage ? receiverId?.toLowerCase() : incomingSenderId;
+            const userIndex = prevUsers.findIndex(u => u.id?.toLowerCase() === targetId);
+            
+            if (userIndex === -1) return prevUsers;
+
+            const updatedUser = { 
+              ...prevUsers[userIndex], 
+              lastMessageAt: new Date(),
+              unreadCount: (!isMyMessage && !isFromSelectedUser) 
+                ? (prevUsers[userIndex].unreadCount || 0) + 1 
+                : prevUsers[userIndex].unreadCount
+            };
+
+            const newUsers = [...prevUsers];
+            newUsers.splice(userIndex, 1);
+            return [updatedUser, ...newUsers];
           });
-
-          // Play sound for received messages (not my own)
-          if (!isMyMessage && isFromSelectedUser) {
-            playSound('messageReceived')
-          }
-
-          // Only mark as read if app is in foreground AND viewing this user's chat
-          if (isFromSelectedUser && !isMyMessage && isAppActiveRef.current) {
-            markAsRead(senderId);
-            setIsTyping(false);
-          }
-        }
-        
-        // Show notification for incoming messages (not from me)
-        // Only on WEB platform - native uses FCM push notifications
-        // WhatsApp behavior: No notification when app is in foreground on native
-        if (!isMyMessage && (!isFromSelectedUser || !isAppActiveRef.current)) {
-          // Play notification sound
-          playSound('notification')
-          
-          // Only show local notification on web platform
-          if (!Capacitor.isNativePlatform()) {
-            const sender = usersRef.current.find(u => u.id?.toLowerCase() === incomingSenderId);
-            const senderName = sender?.fullName || sender?.userName || message.senderName || 'Someone';
-            const messageContent = message.content?.substring(0, 100) || 'New message';
-            console.log('📱 Showing notification for:', senderName, messageContent);
-            showNotification(senderId, senderName, messageContent);
-          } else {
-            console.log('📱 Native platform - skipping local notification (FCM handles background)');
-          }
-        }
-
-        // Sidebar Güncelleme
-        setUsers(prevUsers => {
-          const targetId = isMyMessage ? receiverId?.toLowerCase() : incomingSenderId;
-          const userIndex = prevUsers.findIndex(u => u.id?.toLowerCase() === targetId);
-          
-          if (userIndex === -1) return prevUsers;
-
-          const updatedUser = { 
-            ...prevUsers[userIndex], 
-            lastMessageAt: new Date(),
-            unreadCount: (!isMyMessage && !isFromSelectedUser) 
-              ? (prevUsers[userIndex].unreadCount || 0) + 1 
-              : prevUsers[userIndex].unreadCount
-          };
-
-          const newUsers = [...prevUsers];
-          newUsers.splice(userIndex, 1);
-          return [updatedUser, ...newUsers];
         });
-      });
 
-        // === MESSAGES READ ===
         newConnection.on('MessagesRead', () => {
           setMessages(prev => prev.map(msg => ({ ...msg, isRead: true })))
         })
         
-        // === USER ONLINE STATUS ===
         newConnection.on('UserOnline', (userId) => {
-          console.log(`👤 User ${userId} is now online`)
           setUsers(prev => prev.map(u => 
             u.id === userId ? { ...u, isOnline: true } : u
           ))
@@ -837,7 +942,6 @@ function App() {
         })
 
         newConnection.on('UserOffline', (userId) => {
-          console.log(`👤 User ${userId} is now offline`)
           setUsers(prev => prev.map(u => 
             u.id === userId ? { ...u, isOnline: false } : u
           ))
@@ -846,9 +950,7 @@ function App() {
           )
         })
 
-        // === USER TYPING ===
         newConnection.on('UserTyping', (userId) => {
-          console.log(`⌨️ User ${userId} is typing`)
           if (selectedUserRef.current?.id === userId) {
             setIsTyping(true)
             if (typingTimeout) clearTimeout(typingTimeout)
@@ -858,24 +960,22 @@ function App() {
         })
 
         newConnection.on('UserStoppedTyping', (userId) => {
-          console.log(`⌨️ User ${userId} stopped typing`)
           if (selectedUserRef.current?.id === userId) {
             setIsTyping(false)
             if (typingTimeout) clearTimeout(typingTimeout)
           }
         })
         
-        // === ERROR MESSAGE ===
         newConnection.on('ErrorMessage', (errorMsg) => {
           console.error("Backend Error:", errorMsg)
           showToast(errorMsg, 'error')
         })
 
       } catch (err) {
-        console.error('❌ SignalR Connection Error:', err)
+        console.error('❌ SignalR Error:', err)
         if (isMounted) {
           setConnectionStatus('failed')
-          showToast('Connection failed. Retrying...', 'error')
+          showToast('Connection failed.', 'error')
         }
       }
     }
@@ -897,19 +997,19 @@ function App() {
       }
       if (typingTimeout) clearTimeout(typingTimeout)
     }
-  }, [token, loadUsers, markAsRead, showToast])
+  }, [token, loadUsers, markAsRead, showToast, playSound, showNotification])
 
-  // === SELECT USER ===
+  // Select user
   const handleSelectUser = useCallback(async (u) => {
     setSelectedUser(u)
     setIsTyping(false)
     markAsRead(u.id)
     
-    // Clear pending notifications for this user
+    await triggerHaptic(ImpactStyle.Light)
+    
     if (pendingNotificationsRef.current[u.id]) {
       delete pendingNotificationsRef.current[u.id]
       
-      // Cancel the notification on mobile
       if (Capacitor.isNativePlatform()) {
         try {
           const notificationId = Math.abs(u.id.split('').reduce((a, b) => {
@@ -917,27 +1017,23 @@ function App() {
             return a & a
           }, 0)) % 2147483647
           await LocalNotifications.cancel({ notifications: [{ id: notificationId }] })
-          console.log('📱 Cancelled notification for user:', u.id)
-        } catch (e) {
-          // Ignore if notification doesn't exist
-        }
+        } catch (e) {}
       }
     }
     
-    // Close mobile sidebar when user selected
     if (isMobile) {
       setIsMobileSidebarOpen(false)
     }
   }, [markAsRead, isMobile])
 
-  // === LOAD MESSAGES WHEN USER SELECTED ===
+  // Load messages when user selected
   useEffect(() => {
     if (selectedUser?.id && token) {
       loadMessages(selectedUser.id)
     }
   }, [selectedUser?.id, token, loadMessages])
 
-  // === HANDLE TYPING ===
+  // Typing notification
   const handleTyping = useCallback(() => {
     if (!connection || !selectedUser) return
     try {
@@ -953,13 +1049,13 @@ function App() {
     }
   }, [messageInput, selectedUser, connection, handleTyping])
 
-  // === SEND MESSAGE ===
+  // Send message
   const sendMessage = async (e) => {
     e.preventDefault()
     
     if ((!messageInput.trim() && !selectedFile) || !selectedUser || !connection || connectionStatus !== 'connected') {
       if (connectionStatus !== 'connected') {
-        showToast('Connection lost. Please wait...', 'error')
+        showToast('Connection lost.', 'error')
       }
       return
     }
@@ -970,13 +1066,12 @@ function App() {
         const storedUser = localStorage.getItem('user')
         currentUser = storedUser ? JSON.parse(storedUser) : null
       } catch (err) {
-        console.error('❌ Failed to parse user from localStorage:', err)
+        console.error('Failed to parse user:', err)
       }
     }
 
     if (!currentUser?.id) {
-      console.error('❌ No user ID found')
-      showToast('Session expired. Please login again.', 'error')
+      showToast('Session expired.', 'error')
       logout()
       return
     }
@@ -1030,7 +1125,7 @@ function App() {
 
       setMessages(prev => [...prev, optimisticMessage])
       
-      // Play send sound
+      await triggerHaptic(ImpactStyle.Light)
       playSound('messageSent')
 
       setUsers(prev => {
@@ -1056,7 +1151,7 @@ function App() {
       await connection.invoke('SendMessage', messagePayload)
 
     } catch (err) {
-      console.error("❌ Send message error:", err)
+      console.error("Send message error:", err)
       setIsUploading(false)
       setUploadProgress(0)
       const errorMessage = err.response?.data?.message || 
@@ -1068,7 +1163,7 @@ function App() {
     }
   }
 
-  // === AUTH SUCCESS HANDLER ===
+  // Auth handlers
   const handleAuthSuccess = (responseData) => {
     const receivedToken = responseData.token || 
                           responseData.data?.token || 
@@ -1112,7 +1207,6 @@ function App() {
     setUser(userData)
   }
 
-  // === LOGIN ===
   const login = async (e) => {
     e.preventDefault()
     try {
@@ -1121,7 +1215,7 @@ function App() {
       showToast('Welcome back!', 'success')
     } catch (error) {
       const errorData = error.response?.data
-      let errorMessage = 'Invalid email or password. Please try again.'
+      let errorMessage = 'Invalid email or password.'
       
       if (errorData?.error?.message) {
         errorMessage = errorData.error.message
@@ -1135,7 +1229,7 @@ function App() {
           }
         })
         if (allErrors.length > 0) {
-          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more error${allErrors.length > 2 ? 's' : ''}`
+          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more`
         }
       } else if (errorData?.message) {
         errorMessage = errorData.message
@@ -1147,7 +1241,6 @@ function App() {
     }
   }
 
-  // === REGISTER ===
   const register = async (e) => {
     e.preventDefault()
     try {
@@ -1161,18 +1254,18 @@ function App() {
             password: registerForm.password
           })
           handleAuthSuccess(loginResponse.data)
-          showToast('Welcome aboard! 🎉', 'success')
+          showToast('Welcome! 🎉', 'success')
         } catch (loginError) {
-          showToast('Account created! Please login with your credentials.', 'success')
+          showToast('Account created! Please login.', 'success')
           setIsRegistering(false)
         }
       } else {
         handleAuthSuccess(data)
-        showToast('Welcome back! 👋', 'success')
+        showToast('Welcome! 👋', 'success')
       }
     } catch (error) {
       const errorData = error.response?.data
-      let errorMessage = 'Registration failed. Please try again.'
+      let errorMessage = 'Registration failed.'
       
       if (errorData?.error?.message) {
         errorMessage = errorData.error.message
@@ -1186,7 +1279,7 @@ function App() {
           }
         })
         if (allErrors.length > 0) {
-          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more error${allErrors.length > 2 ? 's' : ''}`
+          errorMessage = allErrors.length === 1 ? allErrors[0] : `${allErrors[0]} and ${allErrors.length - 1} more`
         }
       } else if (errorData?.message) {
         errorMessage = errorData.message
@@ -1198,20 +1291,16 @@ function App() {
     }
   }
 
-  // === LOGOUT ===
   const logout = async () => {
-    // First notify server that user is going offline
     if (connection && connection.state === signalR.HubConnectionState.Connected) {
       try {
         await connection.invoke('SetUserOffline')
-        console.log('✅ SetUserOffline called before logout')
       } catch (err) {
         console.error('SetUserOffline error:', err)
       }
       
       try {
         await connection.stop()
-        console.log('✅ Connection stopped')
       } catch (err) {
         console.error('Logout connection stop error:', err)
       }
@@ -1229,7 +1318,7 @@ function App() {
     setConnection(null)
   }
 
-  // === LOGIN/REGISTER SCREEN ===
+  // Login/Register Screen
   if (!token) {
     return (
       <div className="login-container">
@@ -1310,7 +1399,7 @@ function App() {
     )
   }
 
-  // === MAIN CHAT INTERFACE ===
+  // Main Chat Interface
   return (
     <div className="container">
       {toast && (
@@ -1324,7 +1413,6 @@ function App() {
         </div>
       )}
 
-      {/* Mobile sidebar backdrop */}
       {isMobile && (
         <div 
           className={`sidebar-backdrop ${isMobileSidebarOpen ? 'visible' : ''}`}
@@ -1351,10 +1439,10 @@ function App() {
             )}
           </div>
           <div className="sidebar-header-actions">
-            <button onClick={toggleTheme} className="theme-btn" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            <button onClick={toggleTheme} className="theme-btn" title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button onClick={toggleSound} className="sound-btn" title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}>
+            <button onClick={toggleSound} className="sound-btn" title={soundEnabled ? 'Mute' : 'Unmute'}>
               {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
             <button onClick={() => {
@@ -1378,29 +1466,19 @@ function App() {
             </p>
           ) : (
             users.filter(u => u.id !== user?.id).map(u => (
-              <div 
-                key={u.id} 
-                className={`user-item ${selectedUser?.id === u.id ? 'active' : ''}`}
+              <UserListItem
+                key={u.id}
+                user={u}
+                isSelected={selectedUser?.id === u.id}
                 onClick={() => handleSelectUser(u)}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   setViewProfileUserId(u.id)
                   setShowProfilePage(true)
                 }}
-              >
-                <div className="user-avatar">
-                  {(u.fullName?.[0] || u.userName?.[0] || '?').toUpperCase()}
-                </div>
-                <div className="user-row">
-                  <div className="user-info">
-                    <span className="user-name">{u.fullName || u.userName}</span>
-                    {u.isOnline && <span className="online-dot" title="Online" />}
-                  </div>
-                  {u.unreadCount > 0 && (
-                    <div className="notification-badge">{u.unreadCount}</div>
-                  )}
-                </div>
-              </div>
+                unreadCount={u.unreadCount}
+                isOnline={u.isOnline}
+              />
             ))
           )}
         </div>
@@ -1476,78 +1554,14 @@ function App() {
             </div>
             
             <div className="messages">
-              {messages.map((msg, i) => {
-                // System message (call history)
-                if (msg.type === 'System') {
-                  const isDeclined = msg.content.includes('declined');
-                  const isMissed = msg.content.includes('Missed');
-                  const isNegative = isDeclined || isMissed;
-                  
-                  return (
-                    <div key={msg.id || i} className="system-message">
-                      <div className={`system-message-content ${isNegative ? 'negative' : ''}`}>
-                        <span className="call-icon">
-                          {msg.content.includes('Video') ? <Video size={16} /> : <Phone size={16} />}
-                        </span>
-                        <span className="call-text">{msg.content}</span>
-                      </div>
-                      <div className="system-message-time">
-                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                  );
-                }
-                
-                // Regular message
-                return (
-                  <div 
-                    key={msg.id || i} 
-                    className={`message ${msg.senderId === user?.id ? 'sent' : 'received'}`}
-                  >
-                    <div className="msg-bubble">
-                    {msg.attachments?.map(att => (
-                      <div key={att.id} style={{ marginBottom: 10 }}>
-                        {att.type === 'Image' || att.type === '1' || att.type === 1 ? (
-                          <div 
-                            className="msg-image-container"
-                            onClick={() => setLightboxImage(`${BACKEND_URL}${att.fileUrl}`)}
-                          >
-                            <SecureImage 
-                              src={`${BACKEND_URL}${att.fileUrl}`} 
-                              alt={att.fileName}
-                              className="msg-image"
-                            />
-                            <div className="msg-image-overlay">
-                              <Maximize2 size={24} />
-                            </div>
-                          </div>
-                        ) : (
-                          <a 
-                            href={`${BACKEND_URL}${att.fileUrl}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="file-attachment"
-                          >
-                            <File size={18} />
-                            <span>{att.fileName}</span>
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                    {msg.content && <p style={{ margin: 0 }}>{msg.content}</p>}
-                  </div>
-                  
-                  <div className="msg-time">
-                    {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {msg.senderId === user?.id && (
-                      <span className={`read-status ${msg.isRead ? 'read' : 'sent'}`}>
-                        {msg.isRead ? <CheckCheck size={16} /> : <Check size={16} />}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
+              {messages.map((msg, i) => (
+                <MessageItem
+                  key={msg.id || i}
+                  msg={msg}
+                  currentUserId={user?.id}
+                  onImageClick={setLightboxImage}
+                />
+              ))}
 
               {isTyping && (
                 <div className="typing-indicator">
@@ -1593,7 +1607,7 @@ function App() {
                   {isCompressing && (
                     <div className="compression-status">
                       <Loader size={14} className="spinning" />
-                      <span>Sıkıştırılıyor...</span>
+                      <span>Compressing...</span>
                     </div>
                   )}
                   <button 
@@ -1646,7 +1660,7 @@ function App() {
               </button>
             </form>
           </>
-        ) : showProfilePage ? null : (
+        ) : (
           <div className="no-chat">
             <div className="no-chat-content">
               <h2>Ready to chat? 💬</h2>
@@ -1656,7 +1670,6 @@ function App() {
         )}
       </div>
 
-      {/* Incoming Call Modal - for receiver */}
       {callStatus === 'ringing' && activeCall && activeCall.initiatorId !== user?.id && (
         <IncomingCallModal 
           call={activeCall}
@@ -1665,7 +1678,6 @@ function App() {
         />
       )}
 
-      {/* Outgoing Call Screen - for initiator */}
       {callStatus === 'ringing' && activeCall && activeCall.initiatorId === user?.id && (
         <div className="incoming-call-overlay">
           <div className="incoming-call-modal">

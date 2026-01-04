@@ -1,5 +1,26 @@
 /* 🌿 Warm & Friendly Theme - "Connect Naturally" */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #0a0e27; /* Senin tema rengin */
+  overflow: hidden; /* Kaydırma çubuğu sorunlarını önler */
+}
+body {
+  /* Android varsayılan fontu Roboto'yu ekle */
+  font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Yazı render kalitesini artır */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
+/* Kaydırılabilir alanların hepsine native davranış ekle */
+.user-list, .messages, .settings-page, .profile-page {
+  overscroll-behavior-y: contain; /* Sayfa yenilemeyi engeller */
+  -webkit-overflow-scrolling: touch; /* iOS için smooth scroll */
+}
 /* ===== DARK THEME (Default) ===== */
 :root, [data-theme="dark"] {
   /* Warm, inviting backgrounds - AYNI KALIYOR */
@@ -904,15 +925,46 @@ input, textarea, .msg-bubble, .user-name {
 }
 
 /* === INPUT AREA === */
+/* === INPUT AREA === */
 .input-area {
+  /* Masaüstü standartları */
   padding: 20px 30px;
-  background: var(--bg-sidebar);
+  background: var(--bg-sidebar); /* Eğer blur kullanacaksan burası yarı saydam olmalı */
   display: flex;
   gap: 12px;
   border-top: 1px solid var(--border-color);
+  
+  /* Masaüstünde Blur kalabilir (GPU güçlüdür) */
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  
   position: relative;
   flex-wrap: wrap;
+  z-index: 50; /* Klavye açılınca diğer elementlerin altında kalmasın */
+}
+
+/* 📱 ANDROID & MOBİL İÇİN ÖZEL AYAR (Bunu altına ekle) */
+@media (max-width: 480px) {
+  .input-area {
+    /* 1. Yan boşlukları daralt (Mobilde her piksel değerli) */
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 12px;
+    
+    /* 2. SAFE AREA & GESTURE BAR KORUMASI */
+    /* Android alttaki çizgiye yapışmaması için extra boşluk + safe area */
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 20px));
+    
+    /* 3. Performans için Blur'u kapat (Klavye hızı artar) */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    
+    /* Blur kapandığı için arka plan tam opak olmalı ki alttaki mesajlar görünmesin */
+    background: var(--bg-sidebar); 
+    
+    /* Butonlar birbirine daha yakın olsun */
+    gap: 8px;
+  }
 }
 
 .file-preview {
@@ -1430,24 +1482,21 @@ input, textarea, .msg-bubble, .user-name {
 @media (max-width: 480px) {
   body {
     font-size: 14px;
-    /* Add padding for Android system bars */
-    padding-top: var(--android-status-bar);
-    padding-bottom: var(--android-nav-bar);
+    padding: 0; 
   }
 
+  /* Container ayarlarını birleştirdim, temiz olsun */
   .container {
-    flex-direction: column;
-    /* Adjust height for system bars */
+    padding-top: env(safe-area-inset-top, 24px); 
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    flex-direction: column; /* Mobilde alt alta dizilim */
     height: calc(100vh - var(--android-status-bar) - var(--android-nav-bar));
     height: calc(100dvh - var(--android-status-bar) - var(--android-nav-bar));
   }
 
-  /* Sidebar backdrop shows on mobile */
-  .sidebar-backdrop {
-    display: block;
-  }
-
+  /* Sidebar fixed padding */
   .sidebar {
+    padding-top: env(safe-area-inset-top, 24px);
     position: fixed;
     top: var(--android-status-bar);
     left: 0;
@@ -1456,8 +1505,19 @@ input, textarea, .msg-bubble, .user-name {
     height: calc(100dvh - var(--android-status-bar) - var(--android-nav-bar));
     z-index: 1000;
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    padding-top: 0;
     padding-bottom: 0;
+  }
+  
+  .input-area {
+    padding: 10px 12px;
+    gap: 8px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 20px));
+  }
+
+  /* ... AŞAĞIDAKİ DİĞER MOBİL KODLARIN BURADAN DEVAM ETMELİ ... */
+
+  .sidebar-backdrop {
+    display: block;
   }
 
   .sidebar.mobile-hidden {
@@ -1487,7 +1547,6 @@ input, textarea, .msg-bubble, .user-name {
     white-space: nowrap;
   }
 
-  /* Call buttons - icon only on mobile */
   .call-buttons {
     gap: 6px;
   }
@@ -1513,18 +1572,12 @@ input, textarea, .msg-bubble, .user-name {
     border-radius: 16px;
   }
 
-  .input-area {
-    padding: 10px 12px;
-    gap: 8px;
-  }
-
   .input-area input {
-    font-size: 16px; /* Prevents iOS zoom on focus */
+    font-size: 16px; 
     padding: 12px 14px;
     border-radius: 20px;
   }
 
-  /* Send button - icon only */
   .input-area button[type="submit"] {
     padding: 12px 14px;
     font-size: 0;
@@ -1573,14 +1626,12 @@ input, textarea, .msg-bubble, .user-name {
 
   .user-list {
     padding: 8px;
-    /* Smooth momentum scrolling */
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
   }
 
   .user-item {
     padding: 12px;
-    /* Better touch feedback */
     transition: background 0.15s ease, transform 0.15s ease;
   }
 
@@ -1608,7 +1659,7 @@ input, textarea, .msg-bubble, .user-name {
 
   .login-box input {
     padding: 14px 16px;
-    font-size: 16px; /* Prevents iOS zoom */
+    font-size: 16px; 
   }
 
   .login-box button {
@@ -1646,7 +1697,6 @@ input, textarea, .msg-bubble, .user-name {
     height: 36px;
   }
 
-  /* File preview mobile */
   .file-preview {
     padding: 10px 12px;
   }
@@ -1659,12 +1709,10 @@ input, textarea, .msg-bubble, .user-name {
     max-width: 200px;
   }
 
-  /* Online status hide text on mobile */
   .online-status span:not(.status-dot) {
     display: none;
   }
 
-  /* No chat screen mobile */
   .no-chat-content {
     padding: 24px 20px;
   }
@@ -1677,7 +1725,6 @@ input, textarea, .msg-bubble, .user-name {
     font-size: 0.9rem;
   }
 
-  /* Settings page mobile */
   .settings-page,
   .profile-page {
     padding: 16px;
@@ -1696,7 +1743,8 @@ input, textarea, .msg-bubble, .user-name {
   .settings-footer button {
     width: 100%;
   }
-}
+
+} /* ✅ KAPANIŞ PARANTEZİ SADECE BURADA, EN SONDA OLMALI */
 
 /* Tablets and small laptops */
 @media (min-width: 481px) and (max-width: 768px) {
@@ -3161,4 +3209,26 @@ input, textarea, .msg-bubble, .user-name {
   padding: 8px 16px;
   border-radius: 8px;
   backdrop-filter: blur(10px);
+}
+/* Performans Optimizasyonu: Blur efektleri mobil cihazlarda kapatılabilir */
+@media (max-width: 768px) {
+  .sidebar-header, 
+  .chat-header, 
+  .input-area,
+  .profile-header,
+  .settings-header {
+    /* Blur yerine hafif transparan düz renk daha performanslıdır */
+    backdrop-filter: none !important; 
+    background: var(--bg-sidebar); /* veya hafif şeffaf: rgba(35, 39, 56, 0.95) */
+  }
+
+  /* Mesajlar kayarken takılmaması için */
+  .messages {
+    will-change: scroll-position;
+  }
+  
+  /* Karmaşık gölgeleri mobilde basitleştir */
+  .msg-bubble {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
 }
