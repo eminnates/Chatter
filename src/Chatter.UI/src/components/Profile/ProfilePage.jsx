@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { X, User, Mail, Camera, Save, LogOut, FileText } from "lucide-react"
-import "./ProfilePage.css"
+import { X, User, Mail, Camera, Save, LogOut, FileText, Loader2 } from "lucide-react"
 
 export default function ProfilePage({
   user,
@@ -165,59 +164,75 @@ export default function ProfilePage({
   }
 
   return (
-    <div className="profile-overlay">
-      <div className="profile-modal">
+    // Overlay: Mobilde tam ekran, Masaüstünde karartılmış arka plan
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+      
+      {/* Modal Container */}
+      <div className="w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md bg-bg-card md:rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-300">
+        
         {/* Header */}
-        <div className="profile-header">
-          <h1 className="profile-title">Edit Profile</h1>
-          <button onClick={onClose} className="close-btn" aria-label="Close">
+        <div className="flex items-center justify-between px-5 py-4 bg-bg-sidebar border-b border-white/5">
+          <h1 className="text-lg font-bold bg-gradient-to-r from-accent-primary via-accent-purple to-accent-warm bg-clip-text text-transparent">
+            {isOwnProfile ? 'Edit Profile' : 'User Profile'}
+          </h1>
+          <button 
+            onClick={onClose} 
+            className="p-2 rounded-full text-text-muted hover:bg-white/10 hover:text-text-main transition-colors active:scale-95"
+            aria-label="Close"
+          >
             <X size={20} />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="profile-content">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 overscroll-contain">
+          
           {/* Avatar Section */}
-          <div className="avatar-section">
-            <div className="avatar-wrapper">
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative w-32 h-32 group">
               {profileData.profilePictureUrl ? (
-                <img src={profileData.profilePictureUrl || "/placeholder.svg"} alt="Profile" className="profile-img" />
+                <img 
+                  src={profileData.profilePictureUrl} 
+                  alt="Profile" 
+                  className="w-full h-full rounded-full object-cover border-4 border-bg-card shadow-lg ring-2 ring-accent-primary/20" 
+                />
               ) : (
-                <div className="avatar-placeholder">
-                  <User size={48} color="white" />
+                <div className="w-full h-full rounded-full bg-gradient-to-br from-accent-primary to-accent-purple flex items-center justify-center border-4 border-bg-card shadow-lg ring-2 ring-accent-primary/20">
+                  <User size={48} className="text-white drop-shadow-md" />
                 </div>
               )}
 
-              {/* Camera Button */}
+              {/* Camera Button (Only for own profile) */}
               {isOwnProfile && (
                 <>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading}
-                    className="camera-btn"
-                    aria-label="Change profile picture"
+                    className="absolute bottom-0 right-0 p-2.5 bg-accent-primary hover:bg-accent-hover text-white rounded-full shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Change photo"
                   >
-                    <Camera size={20} />
+                    <Camera size={18} />
                   </button>
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
                     onChange={handleFileSelect}
-                    style={{ display: "none" }}
+                    className="hidden"
                   />
                 </>
               )}
             </div>
-            {isOwnProfile && <p className="avatar-hint">Click to change photo</p>}
+            {isOwnProfile && <p className="text-xs text-text-muted">Tap camera icon to change</p>}
           </div>
 
           {/* Form Fields */}
-          <div className="form-section">
+          <div className="space-y-4">
+            
             {/* Full Name */}
-            <div className="input-group">
-              <label className="input-label">
-                <User size={16} color="#10b981" /> Full Name
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <User size={14} className="text-accent-primary" /> Full Name
               </label>
               <input
                 type="text"
@@ -225,15 +240,15 @@ export default function ProfilePage({
                 value={profileData.fullName}
                 onChange={handleInputChange}
                 disabled={!isOwnProfile || loading}
-                className="form-input"
+                className="w-full px-4 py-3 bg-bg-main border border-white/5 rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="Your full name"
               />
             </div>
 
             {/* Username */}
-            <div className="input-group">
-              <label className="input-label">
-                <User size={16} color="#3b82f6" /> Username
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <User size={14} className="text-accent-purple" /> Username
               </label>
               <input
                 type="text"
@@ -241,30 +256,28 @@ export default function ProfilePage({
                 value={profileData.userName}
                 onChange={handleInputChange}
                 disabled={!isOwnProfile || loading}
-                className="form-input"
+                className="w-full px-4 py-3 bg-bg-main border border-white/5 rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="Username"
               />
             </div>
 
-            {/* Email */}
-            <div className="input-group">
-              <label className="input-label">
-                <Mail size={16} color="#6b7280" /> Email
+            {/* Email (Read Only) */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <Mail size={14} className="text-accent-warm" /> Email
               </label>
               <input
                 type="email"
-                name="email"
                 value={profileData.email}
                 disabled
-                className="form-input"
-                style={{ opacity: 0.6, cursor: "not-allowed" }}
+                className="w-full px-4 py-3 bg-bg-main/50 border border-white/5 rounded-xl text-text-muted cursor-not-allowed"
               />
             </div>
 
             {/* About Me */}
-            <div className="input-group">
-              <label className="input-label">
-                <FileText size={16} color="#a855f7" /> About Me
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                <FileText size={14} className="text-indigo-400" /> About Me
               </label>
               <textarea
                 name="bio"
@@ -272,7 +285,7 @@ export default function ProfilePage({
                 onChange={handleInputChange}
                 disabled={!isOwnProfile || loading}
                 rows={3}
-                className="form-textarea"
+                className="w-full px-4 py-3 bg-bg-main border border-white/5 rounded-xl text-text-main placeholder-text-muted focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/50 transition-all resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="Tell us about yourself..."
               />
             </div>
@@ -280,12 +293,16 @@ export default function ProfilePage({
         </div>
 
         {/* Footer Actions */}
-        <div className="profile-footer">
+        <div className="p-5 bg-bg-sidebar border-t border-white/5 space-y-3 pb-safe-bottom">
           {isOwnProfile && (
-            <button onClick={handleSave} disabled={loading} className="save-btn">
+            <button 
+              onClick={handleSave} 
+              disabled={loading} 
+              className="w-full py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-accent-primary to-accent-hover shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+            >
               {loading ? (
                 <>
-                  <div className="spinner" /> Saving...
+                  <Loader2 size={20} className="animate-spin" /> Saving...
                 </>
               ) : (
                 <>
@@ -295,7 +312,10 @@ export default function ProfilePage({
             </button>
           )}
 
-          <button onClick={onLogout} className="logout-btn">
+          <button 
+            onClick={onLogout} 
+            className="w-full py-3.5 rounded-xl font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
             <LogOut size={20} /> Log Out
           </button>
         </div>

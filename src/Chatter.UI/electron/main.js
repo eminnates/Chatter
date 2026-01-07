@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -6,111 +6,105 @@ let mainWindow = null;
 let tray = null;
 
 function createWindow() {
-  // Determine icon path based on environment
   let iconPath;
   if (isDev) {
     iconPath = path.join(__dirname, '../public/icon.png');
   } else {
-    // In production, try to find the icon in the dist folder
     iconPath = path.join(__dirname, '../dist/icon.png');
   }
   
-  console.log('App Icon Path:', iconPath);
-
-  // Create native image for the icon
   const appIcon = nativeImage.createFromPath(iconPath);
 
-  // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 400,
+    minHeight: 500,
     icon: appIcon,
+    frame: false, // Çerçeve yok
+    titleBarStyle: 'hidden',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'), // Preload yolu
+      sandbox: false
     },
     show: false,
+    backgroundColor: '#1a1d2e',
   });
 
-  // Show window when ready to prevent flickering
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
   if (isDev) {
-    // GELİŞTİRME MODU: Vite sunucusunu yükle
     mainWindow.loadURL('http://localhost:5173');
-    // Opsiyonel: DevTools'u otomatik aç
     mainWindow.webContents.openDevTools();
   } else {
-    // PRODUCTION MODU: Paketlenen index.html dosyasını yükle
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Prevent window from closing, minimize to tray instead
+  // --- WINDOW EVENTS ---
+  
+  // Pencere boyutlandığında React'e haber ver (Senin onMaximizeChange için)
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window-maximized');
+  });
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window-unmaximized');
+  });
+
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
       mainWindow.hide();
-      
-      // Show notification on first minimize
-      if (!mainWindow.minimizedOnce) {
-        mainWindow.minimizedOnce = true;
-        // Optional: Show system notification that app is still running
-      }
     }
-  });
-
-  // Minimize to tray on minimize event
-  mainWindow.on('minimize', (event) => {
-    event.preventDefault();
-    mainWindow.hide();
   });
 }
 
+// --- IPC HANDLERS (Senin Preload.js isimlerinle EŞLEŞTİRİLDİ) ---
+
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
+
+// --- TRAY LOGIC ---
 function createTray() {
-  // Create tray icon
   const iconPath = isDev 
     ? path.join(__dirname, '../public/icon-tray.png')
     : path.join(__dirname, '../dist/icon-tray.png');
     
   let trayIcon;
-  
   try {
     trayIcon = nativeImage.createFromPath(iconPath);
-    if (trayIcon.isEmpty()) {
-      // Fallback: create a simple colored square if icon not found
-      trayIcon = nativeImage.createEmpty();
-    }
+    if (trayIcon.isEmpty()) trayIcon = nativeImage.createEmpty();
   } catch (err) {
-    console.log('Tray icon not found, using empty icon');
     trayIcon = nativeImage.createEmpty();
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('Chatter - Running in background');
+  tray.setToolTip('Chatter');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show Chatter',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createWindow();
-        }
-      }
+      label: 'Show',
+      click: () => mainWindow.show()
     },
-    {
-      label: 'Hide',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.hide();
-        }
-      }
-    },
-    { type: 'separator' },
     {
       label: 'Quit',
       click: () => {
@@ -121,20 +115,7 @@ function createTray() {
   ]);
 
   tray.setContextMenu(contextMenu);
-
-  // Show/hide window on tray icon click
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    } else {
-      createWindow();
-    }
-  });
+  tray.on('click', () => mainWindow.show());
 }
 
 app.whenReady().then(() => {
@@ -142,22 +123,10 @@ app.whenReady().then(() => {
   createTray();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    } else if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-// Keep app running in background
-app.on('window-all-closed', (event) => {
-  // Prevent app from quitting - keep running in background
-  event.preventDefault();
-});
-
-// Handle app quit
 app.on('before-quit', () => {
   app.isQuitting = true;
 });
