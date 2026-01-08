@@ -1,18 +1,23 @@
 {
   "name": "chatter",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.3.1",
   "description": "Chatter Real-time Chat Application",
   "author": {
     "name": "Emin Ates",
     "email": "mhmtmn1800@gmail.com"
   },
   "homepage": "https://github.com/eminnates/Chatter",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eminnates/Chatter.git"
+  },
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "electron:build": "npm run build && electron-builder --win --linux",
+    "electron:publish": "npm run build && electron-builder --win --linux --publish always",
     "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
@@ -21,6 +26,13 @@
   },
   "build": {
     "appId": "com.chatter.app",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "eminnates",
+        "repo": "Chatter"
+      }
+    ],
     "productName": "Chatter",
     "artifactName": "${productName}-Setup-${version}.${ext}",
     "directories": {
@@ -79,6 +91,8 @@
     "@hugotomazi/capacitor-navigation-bar": "^4.0.1",
     "@microsoft/signalr": "^8.0.17",
     "axios": "^1.13.2",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3",
     "firebase": "^12.7.0",
     "lucide-react": "^0.562.0",
     "react": "^18.2.0",

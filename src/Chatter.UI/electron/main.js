@@ -1,5 +1,18 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater'); // EKLENDİ
+const log = require('electron-log'); // EKLENDİ
+
+// --- AUTO UPDATER AYARLARI ---
+log.transports.file.level = 'info';
+autoUpdater.logger = log;
+autoUpdater.autoDownload = false; // Kullanıcıya sormadan indirmesin
+
+// Windows için App ID
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.chatter.app');
+}
+
 const isDev = !app.isPackaged;
 
 let mainWindow = null;
@@ -35,6 +48,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    // EKLENDİ: Uygulama açılınca güncelleme kontrolü yap (Sadece Prod modunda)
+    if (!isDev) {
+      autoUpdater.checkForUpdates();
+    }
   });
 
   if (isDev) {
@@ -46,7 +63,7 @@ function createWindow() {
 
   // --- WINDOW EVENTS ---
   
-  // Pencere boyutlandığında React'e haber ver (Senin onMaximizeChange için)
+  // Pencere boyutlandığında React'e haber ver
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window-maximized');
   });
@@ -63,7 +80,7 @@ function createWindow() {
   });
 }
 
-// --- IPC HANDLERS (Senin Preload.js isimlerinle EŞLEŞTİRİLDİ) ---
+// --- IPC HANDLERS (Pencere Kontrolleri) ---
 
 ipcMain.on('window-minimize', () => {
   if (mainWindow) mainWindow.minimize();
@@ -81,6 +98,60 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
+});
+
+// --- AUTO UPDATER EVENTS (EKLENDİ) ---
+
+// 1. Güncelleme kontrolü başladı
+autoUpdater.on('checking-for-update', () => {
+  log.info('Checking for update...');
+});
+
+// 2. Güncelleme bulundu -> Kullanıcıya sor
+autoUpdater.on('update-available', (info) => {
+  log.info('Update available.');
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Update Available',
+    message: `A new version (${info.version}) is available. Do you want to download it now?`,
+    buttons: ['Yes', 'No']
+  }).then((result) => {
+    if (result.response === 0) { // 'Yes' seçilirse
+      autoUpdater.downloadUpdate();
+    }
+  });
+});
+
+// 3. Güncelleme yok
+autoUpdater.on('update-not-available', () => {
+  log.info('Update not available.');
+});
+
+// 4. Hata oluştu
+autoUpdater.on('error', (err) => {
+  log.error('Error in auto-updater. ' + err);
+});
+
+// 5. İndirme ilerlemesi (Loglara yazar)
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = "Download speed: " + progressObj.bytesPerSecond;
+  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+  log.info(log_message);
+});
+
+// 6. İndirme bitti -> Yükle ve Yeniden Başlat
+autoUpdater.on('update-downloaded', () => {
+  log.info('Update downloaded');
+  dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: 'Install Update',
+    message: 'Update downloaded. The application will restart to install updates.',
+    buttons: ['Restart Now', 'Later']
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
 });
 
 // --- TRAY LOGIC ---
@@ -101,17 +172,9 @@ function createTray() {
   tray.setToolTip('Chatter');
 
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show',
-      click: () => mainWindow.show()
-    },
-    {
-      label: 'Quit',
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      }
-    }
+    { label: 'Show', click: () => mainWindow.show() },
+    { label: 'Check for Updates', click: () => autoUpdater.checkForUpdates() }, // Manuel kontrol menüsü
+    { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
   ]);
 
   tray.setContextMenu(contextMenu);

@@ -17,7 +17,7 @@ import OutgoingCallScreen from './components/Call/OutgoingCallScreen'
 import ProfilePage from './components/Profile/ProfilePage'
 import Lightbox from './components/Common/Lightbox'
 import Toast from './components/Common/Toast'
-import TitleBar from './components/Common/TitleBar'
+import TitleBar from './components/Common/TitleBar' // TitleBar path'ini kontrol et
 
 // --- HOOKS ---
 import { useWebRTC } from './hooks/useWebRTC'
@@ -104,22 +104,6 @@ function App() {
     if (soundEnabled && sounds[soundName]) sounds[soundName]()
   }, [soundEnabled])
 
-  // === NOTIFICATIONS ===
-  const requestNotificationPermission = useCallback(async () => {
-    if (Capacitor.isNativePlatform()) {
-      try { await LocalNotifications.requestPermissions() } catch (err) {}
-    } else {
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission()
-    }
-  }, [])
-
-  const showNotification = useCallback(async (senderId, senderName, messageContent) => {
-    await triggerHaptic(ImpactStyle.Light)
-    if (!Capacitor.isNativePlatform() && 'Notification' in window && Notification.permission === 'granted') {
-       new Notification(senderName, { body: messageContent, icon: '/icon.png' });
-    }
-  }, [])
-
   // === DATA LOADERS ===
   const loadUsers = useCallback(async (activeToken) => {
     try {
@@ -130,48 +114,84 @@ function App() {
     }
   }, [])
 
-  // ✅ YENİ: loadMessages - Son mesajı user listesine kaydet
   const loadMessages = useCallback(async (userId) => {
     if (!token) return;
-    
     try {
-      const convRes = await axios.post(
-        `${API_URL}/chat/conversation/${userId}`, 
-        {}, 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
+      const convRes = await axios.post(`${API_URL}/chat/conversation/${userId}`, {}, { headers: { Authorization: `Bearer ${token}` } })
       const convId = convRes.data.value || convRes.data.id || convRes.data;
       if (!convId) throw new Error("No Conv ID");
-      
-      const msgRes = await axios.get(
-        `${API_URL}/chat/messages/${convId}`, 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const msgRes = await axios.get(`${API_URL}/chat/messages/${convId}`, { headers: { Authorization: `Bearer ${token}` } })
       
       const allMessages = (Array.isArray(msgRes.data) ? msgRes.data : msgRes.data.data || [])
         .sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt));
       
       setMessages(allMessages);
       
-      // Son mesajı user listesine kaydet
+      // Son mesajı user listesine işle
       if (allMessages.length > 0) {
         const lastMsg = allMessages[allMessages.length - 1];
         setUsers(prev => prev.map(u => 
           u.id === userId 
-            ? { 
-                ...u, 
-                lastMessage: lastMsg.content || (lastMsg.attachments?.length > 0 ? '📎 Attachment' : ''),
-                lastMessageTime: lastMsg.sentAt 
-              }
+            ? { ...u, lastMessage: lastMsg.content || (lastMsg.attachments?.length > 0 ? '📎 Attachment' : ''), lastMessageTime: lastMsg.sentAt }
             : u
         ));
       }
-      
-    } catch (error) { 
-      setMessages([]);
+    } catch (error) { setMessages([]); }
+  }, [token])
+
+  const markAsRead = useCallback(async (targetUserId) => {
+    if (!token) return
+    try {
+      await axios.post(`${API_URL}/chat/mark-read/${targetUserId}`, {}, { headers: { Authorization: `Bearer ${token}` } })
+      setUsers(prev => prev.map(u => u.id === targetUserId ? { ...u, unreadCount: 0 } : u))
+    } catch (e) {}
+  }, [token])
+
+  // === ACTIONS ===
+  const handleSelectUser = useCallback((u) => {
+    setSelectedUser(u); 
+    setIsTyping(false); 
+    markAsRead(u.id);
+    if(isMobile) setIsMobileSidebarOpen(false);
+  }, [markAsRead, isMobile]);
+
+  // === NOTIFICATIONS (DÜZELTİLEN KISIM) ===
+  const requestNotificationPermission = useCallback(async () => {
+    if (Capacitor.isNativePlatform()) {
+      try { await LocalNotifications.requestPermissions() } catch (err) {}
+    } else {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission()
     }
-  }, [token]);
+  }, [])
+
+  const showNotification = useCallback(async (senderId, senderName, messageContent) => {
+    await triggerHaptic(ImpactStyle.Light)
+    
+    // DESKTOP & WEB
+    if (!Capacitor.isNativePlatform() && 'Notification' in window && Notification.permission === 'granted') {
+       const notif = new Notification(senderName, { 
+         body: messageContent, 
+         icon: '/icon.png',
+         silent: true 
+       });
+       
+       // TIKLAMA OLAYI
+       notif.onclick = () => {
+         window.focus();
+         // usersRef.current içinden kullanıcıyı bul
+         const targetUser = usersRef.current.find(u => u.id === senderId);
+         if (targetUser) {
+           handleSelectUser(targetUser);
+         }
+         notif.close();
+       };
+    }
+    
+    // MOBILE
+    if (Capacitor.isNativePlatform()) {
+       // Mobil bildirim mantığı buraya...
+    }
+  }, [handleSelectUser]) // handleSelectUser eklendi
 
   // === ACTIONS: Refresh & Swipe ===
   const handleRefresh = async () => {
@@ -288,14 +308,6 @@ function App() {
     triggerHaptic(ImpactStyle.Medium)
     initiateCall(receiverId, callType)
   }, [activeCall, callStatus, initiateCall, showToast, user])
-  
-  const markAsRead = useCallback(async (targetUserId) => {
-    if (!token) return
-    try {
-      await axios.post(`${API_URL}/chat/mark-read/${targetUserId}`, {}, { headers: { Authorization: `Bearer ${token}` } })
-      setUsers(prev => prev.map(u => u.id === targetUserId ? { ...u, unreadCount: 0 } : u))
-    } catch (e) {}
-  }, [token])
 
   // === SIGNALR ===
   useEffect(() => {
@@ -316,7 +328,6 @@ function App() {
         setConnectionStatus('failed');
     });
 
-    // ✅ YENİ: ReceiveMessage - Son mesajı güncelle
     newConnection.on('ReceiveMessage', (msg) => {
          const senderId = msg.senderId || msg.SenderId;
          const myId = getSafeUserId(userRef.current);
@@ -331,9 +342,7 @@ function App() {
              showNotification(senderId, msg.senderName, msg.content);
          }
          
-         // User listesini güncelle - Son mesajı ekle
          setUsers(prev => prev.map(u => {
-           // Mesajı gönderen
            if (u.id === senderId) {
              return {
                ...u,
@@ -342,13 +351,8 @@ function App() {
                unreadCount: isSelected ? 0 : (u.unreadCount || 0) + 1
              };
            }
-           // Eğer ben gönderdim ve karşıdaki kişi bu ise
            if (isMyMsg && u.id === selectedUserRef.current?.id) {
-             return {
-               ...u,
-               lastMessage: msg.content || '📎 Attachment',
-               lastMessageTime: msg.sentAt
-             };
+             return { ...u, lastMessage: msg.content || '📎 Attachment', lastMessageTime: msg.sentAt };
            }
            return u;
          }));
@@ -364,18 +368,10 @@ function App() {
     return () => { newConnection.stop(); }
   }, [token, loadUsers, playSound, showNotification]);
 
-  const handleSelectUser = useCallback((u) => {
-    setSelectedUser(u); 
-    setIsTyping(false); 
-    markAsRead(u.id);
-    if(isMobile) setIsMobileSidebarOpen(false);
-  }, [markAsRead, isMobile]);
-
   useEffect(() => { 
     if(selectedUser && token) loadMessages(selectedUser.id); 
   }, [selectedUser, token, loadMessages]);
 
-  // Typing Notify
   useEffect(() => {
      if(messageInput && selectedUser && connection) {
         connection.invoke('NotifyTyping', selectedUser.id).catch(()=>{});
@@ -418,11 +414,7 @@ function App() {
             setIsUploading(false);
             setUploadProgress(0);
         } catch(error) {
-            let message = 'Upload failed'
-            if (error.response?.status === 413) message = 'File too large (max 10MB)'
-            else if (error.response?.status === 415) message = 'File type not supported'
-            else if (!navigator.onLine) message = 'No internet connection'
-            showToast(message, 'error');
+            showToast('Upload failed', 'error');
             setIsUploading(false);
             setUploadProgress(0);
             return;
