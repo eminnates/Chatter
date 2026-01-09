@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { autoUpdater } = require('electron-updater'); // EKLENDİ
-const log = require('electron-log'); // EKLENDİ
+const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
 
 // --- AUTO UPDATER AYARLARI ---
 log.transports.file.level = 'info';
@@ -17,6 +17,7 @@ const isDev = !app.isPackaged;
 
 let mainWindow = null;
 let tray = null;
+let manualCheck = false; // Manuel kontrol yapılıp yapılmadığını anlamak için bayrak
 
 function createWindow() {
   let iconPath;
@@ -34,12 +35,12 @@ function createWindow() {
     minWidth: 400,
     minHeight: 500,
     icon: appIcon,
-    frame: false, // Çerçeve yok
+    frame: false,
     titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'), // Preload yolu
+      preload: path.join(__dirname, 'preload.js'),
       sandbox: false
     },
     show: false,
@@ -48,8 +49,9 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // EKLENDİ: Uygulama açılınca güncelleme kontrolü yap (Sadece Prod modunda)
+    // Uygulama açılınca sessizce kontrol et (Kullanıcıyı rahatsız etme)
     if (!isDev) {
+      manualCheck = false; 
       autoUpdater.checkForUpdates();
     }
   });
@@ -62,16 +64,9 @@ function createWindow() {
   }
 
   // --- WINDOW EVENTS ---
+  mainWindow.on('maximize', () => mainWindow.webContents.send('window-maximized'));
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('window-unmaximized'));
   
-  // Pencere boyutlandığında React'e haber ver
-  mainWindow.on('maximize', () => {
-    mainWindow.webContents.send('window-maximized');
-  });
-
-  mainWindow.on('unmaximize', () => {
-    mainWindow.webContents.send('window-unmaximized');
-  });
-
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -80,34 +75,22 @@ function createWindow() {
   });
 }
 
-// --- IPC HANDLERS (Pencere Kontrolleri) ---
-
-ipcMain.on('window-minimize', () => {
-  if (mainWindow) mainWindow.minimize();
-});
-
+// --- IPC HANDLERS ---
+ipcMain.on('window-minimize', () => mainWindow?.minimize());
 ipcMain.on('window-maximize', () => {
   if (mainWindow) {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow.maximize();
-    }
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
   }
 });
+ipcMain.on('window-close', () => mainWindow?.close());
 
-ipcMain.on('window-close', () => {
-  if (mainWindow) mainWindow.close();
-});
+// --- AUTO UPDATER EVENTS (GÜNCELLENDİ) ---
 
-// --- AUTO UPDATER EVENTS (EKLENDİ) ---
-
-// 1. Güncelleme kontrolü başladı
 autoUpdater.on('checking-for-update', () => {
   log.info('Checking for update...');
 });
 
-// 2. Güncelleme bulundu -> Kullanıcıya sor
+// GÜNCELLEME VARSA (Her zaman sor)
 autoUpdater.on('update-available', (info) => {
   log.info('Update available.');
   dialog.showMessageBox(mainWindow, {
@@ -116,36 +99,47 @@ autoUpdater.on('update-available', (info) => {
     message: `A new version (${info.version}) is available. Do you want to download it now?`,
     buttons: ['Yes', 'No']
   }).then((result) => {
-    if (result.response === 0) { // 'Yes' seçilirse
+    if (result.response === 0) { // Yes
       autoUpdater.downloadUpdate();
     }
   });
 });
 
-// 3. Güncelleme yok
+// GÜNCELLEME YOKSA (Sadece manuel kontrolde kutu çıkar)
 autoUpdater.on('update-not-available', () => {
   log.info('Update not available.');
+  if (manualCheck) {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'No Updates',
+      message: 'Current version is up-to-date.',
+      buttons: ['OK']
+    });
+    manualCheck = false; // Bayrağı sıfırla
+  }
 });
 
-// 4. Hata oluştu
+// HATA VARSA (Her zaman göster ki anlayalım)
 autoUpdater.on('error', (err) => {
   log.error('Error in auto-updater. ' + err);
+  dialog.showMessageBox(mainWindow, {
+    type: 'error',
+    title: 'Update Error',
+    message: 'An error occurred while checking for updates.\n\n' + (err.message || err),
+    buttons: ['OK']
+  });
 });
 
-// 5. İndirme ilerlemesi (Loglara yazar)
 autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log.info(log_message);
+  log.info(`Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`);
 });
 
-// 6. İndirme bitti -> Yükle ve Yeniden Başlat
 autoUpdater.on('update-downloaded', () => {
   log.info('Update downloaded');
   dialog.showMessageBox(mainWindow, {
     type: 'question',
     title: 'Install Update',
-    message: 'Update downloaded. The application will restart to install updates.',
+    message: 'Update downloaded. Restart to install?',
     buttons: ['Restart Now', 'Later']
   }).then((result) => {
     if (result.response === 0) {
@@ -159,7 +153,7 @@ function createTray() {
   const iconPath = isDev 
     ? path.join(__dirname, '../public/icon-tray.png')
     : path.join(__dirname, '../dist/icon-tray.png');
-    
+  
   let trayIcon;
   try {
     trayIcon = nativeImage.createFromPath(iconPath);
@@ -170,10 +164,16 @@ function createTray() {
 
   tray = new Tray(trayIcon);
   tray.setToolTip('Chatter');
-
+  
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show', click: () => mainWindow.show() },
-    { label: 'Check for Updates', click: () => autoUpdater.checkForUpdates() }, // Manuel kontrol menüsü
+    { 
+      label: 'Check for Updates', 
+      click: () => {
+        manualCheck = true; // Manuel kontrol olduğunu belirtiyoruz
+        autoUpdater.checkForUpdates();
+      } 
+    },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
   ]);
 

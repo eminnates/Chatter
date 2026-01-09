@@ -6,6 +6,7 @@ import './index.css'
 // --- CONFIG & UTILS ---
 import { API_URL, HUB_URL } from './config/constants'
 import { sounds } from './utils/soundManager'
+import { checkAndroidUpdate } from './utils/androidUpdater';
 
 // --- COMPONENTS ---
 import AuthScreen from './components/Auth/AuthScreen'
@@ -223,11 +224,13 @@ function App() {
   // === NATIVE LISTENERS ===
   useEffect(() => {
     const init = async () => {
+        // 1. Mobil Platform Kontrolü
         if(Capacitor.isNativePlatform()) {
             document.body.classList.add('is-mobile');
             await SplashScreen.hide();
             await Keyboard.setResizeMode({ mode: KeyboardResize.Native }).catch(() => {});
             
+            // App State (Arka plan / Ön plan) Dinleyicisi
             CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
                 setIsAppActive(isActive);
                 const conn = connectionRef.current;
@@ -241,20 +244,31 @@ function App() {
                 }
             });
 
+            // Geri Tuşu Dinleyicisi
             CapacitorApp.addListener('backButton', ({ canGoBack }) => {
                 if(lightboxImageRef.current) { setLightboxImage(null); return; }
                 if(isMobileSidebarOpenRef.current) { setIsMobileSidebarOpen(false); return; }
                 if(showProfilePageRef.current) { setShowProfilePage(false); return; }
                 if(!canGoBack) CapacitorApp.exitApp(); else window.history.back();
             });
+
+            // --- YENİ EKLENEN KISIM: ANDROID GÜNCELLEME KONTROLÜ ---
+            if (Capacitor.getPlatform() === 'android') {
+                // Uygulama açıldıktan 3 saniye sonra kontrol etsin (Hemen ekrana fırlamasın)
+                setTimeout(() => {
+                    checkAndroidUpdate(showToast);
+                }, 3000);
+            }
+            // -------------------------------------------------------
         }
         
+        // 2. Electron Kontrolü
         if (window.electronAPI?.isElectron) {
             document.body.classList.add('is-electron');
         }
     }
     init();
-  }, [loadUsers]);
+  }, [loadUsers, showToast]); // showToast'u dependency'e ekledik
 
   // Connection Toast Logic
   useEffect(() => {
