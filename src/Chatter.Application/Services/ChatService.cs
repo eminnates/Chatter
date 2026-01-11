@@ -104,6 +104,22 @@ public class ChatService : IChatService
             await _unitOfWork.CommitTransactionAsync();
 
             // 4. DTO DÖNDÜR (BURASI KRİTİK: Attachments eklendi)
+            ReplyMessageDto? replyDto = null;
+            if (message.ReplyToMessageId.HasValue)
+            {
+                var reply = await _unitOfWork.Messages.GetByIdWithDetailsAsync(message.ReplyToMessageId.Value);
+                if (reply != null)
+                {
+                    replyDto = new ReplyMessageDto
+                    {
+                        Id = reply.Id,
+                        SenderId = reply.SenderId,
+                        SenderName = reply.Sender?.FullName ?? reply.Sender?.UserName ?? string.Empty,
+                        Content = reply.Content
+                    };
+                }
+            }
+
             var messageDto = new MessageDto
             {
                 Id = message.Id,
@@ -114,6 +130,7 @@ public class ChatService : IChatService
                 SentAt = message.SentAt,
                 IsRead = false,
                 ReplyToMessageId = message.ReplyToMessageId,
+                ReplyMessage = replyDto,
                 // ANLIK GÖRÜNTÜ İÇİN EKLERİ BURAYA DA EKLEMELİSİN
                 Attachments = message.Attachments.Select(a => new MessageAttachmentDto {
                     FileName = a.FileName,
@@ -152,6 +169,13 @@ public class ChatService : IChatService
             IsRead = m.Status == MessageStatus.Read,
             // DÜZELTME (HATA 2): .ToString() kaldırıldı
             ReplyToMessageId = m.ReplyToMessageId,
+            ReplyMessage = m.ReplyToMessage != null ? new ReplyMessageDto
+            {
+                Id = m.ReplyToMessage.Id,
+                SenderId = m.ReplyToMessage.SenderId,
+                SenderName = m.ReplyToMessage.Sender?.FullName ?? m.ReplyToMessage.Sender?.UserName ?? string.Empty,
+                Content = m.ReplyToMessage.Content
+            } : null,
             Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
             FileUrl = a.FileUrl,
             FileName = a.FileName,
@@ -188,7 +212,14 @@ public class ChatService : IChatService
                     SentAt = c.LastMessage.SentAt,
                     IsRead = c.LastMessage.Status == MessageStatus.Read,
                     // DÜZELTME (HATA 3): .ToString() kaldırıldı
-                    ReplyToMessageId = c.LastMessage.ReplyToMessageId
+                    ReplyToMessageId = c.LastMessage.ReplyToMessageId,
+                    ReplyMessage = c.LastMessage.ReplyToMessage != null ? new ReplyMessageDto
+                    {
+                        Id = c.LastMessage.ReplyToMessage.Id,
+                        SenderId = c.LastMessage.ReplyToMessage.SenderId,
+                        SenderName = c.LastMessage.ReplyToMessage.Sender?.FullName ?? c.LastMessage.ReplyToMessage.Sender?.UserName ?? string.Empty,
+                        Content = c.LastMessage.ReplyToMessage.Content
+                    } : null
                 } : null,
                 LastMessageTime = c.LastMessage?.SentAt ?? c.CreatedAt,
                 UnreadCount = myParticipant?.UnreadCount ?? 0,

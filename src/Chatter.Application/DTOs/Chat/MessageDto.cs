@@ -14,6 +14,7 @@ public class MessageDto
     public DateTime SentAt { get; set; }
     public bool IsRead { get; set; }
     public Guid? ReplyToMessageId { get; set; }
+    public ReplyMessageDto? ReplyMessage { get; set; }
     public List<MessageAttachmentDto>? Attachments { get; set; } = new();
     public List<MessageReactionDto>? Reactions { get; set; }
 }

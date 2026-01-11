@@ -58,6 +58,7 @@ function App() {
   const [connection, setConnection] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [selectedFile, setSelectedFile] = useState(null)
+  const [replyingTo, setReplyingTo] = useState(null)
   const [lightboxImage, setLightboxImage] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
@@ -151,7 +152,8 @@ function App() {
   // === ACTIONS ===
   const handleSelectUser = useCallback((u) => {
     setSelectedUser(u); 
-    setIsTyping(false); 
+    setIsTyping(false);
+    setReplyingTo(null);
     markAsRead(u.id);
     if(isMobile) setIsMobileSidebarOpen(false);
   }, [markAsRead, isMobile]);
@@ -325,88 +327,237 @@ function App() {
 
   // === SIGNALR ===
   useEffect(() => {
-    if (!token) return;
-    setConnectionStatus('connecting');
-    loadUsers(token);
+      if (!token) return;
+      setConnectionStatus('connecting');
+      loadUsers(token);
 
-    const newConnection = new signalR.HubConnectionBuilder()
-        .withUrl(HUB_URL, { accessTokenFactory: () => token, skipNegotiation: true, transport: signalR.HttpTransportType.WebSockets })
-        .withAutomaticReconnect()
-        .build();
+      const newConnection = new signalR.HubConnectionBuilder()
+          .withUrl(HUB_URL, { 
+              accessTokenFactory: () => token, 
+              skipNegotiation: true, 
+              transport: signalR.HttpTransportType.WebSockets 
+          })
+          .withAutomaticReconnect({
+              nextRetryDelayInMilliseconds: retryContext => {
+                  if (retryContext.elapsedMilliseconds < 60000) {
+                      return Math.random() * 2000;
+                  } else {
+                      return 5000;
+                  }
+              }
+          })
+          .configureLogging(signalR.LogLevel.Information)
+          .build();
 
-    newConnection.start().then(() => {
-        setConnection(newConnection);
-        setConnectionStatus('connected');
-        console.log("SignalR Connected");
-    }).catch(() => {
-        setConnectionStatus('failed');
-    });
+      // ⬇️ BAĞLANTI KURULUNCA
+      newConnection.start()
+          .then(() => {
+              setConnection(newConnection);
+              setConnectionStatus('connected');
+              console.log("✅ SignalR Connected");
+              
+              // ⬇️ Bağlanınca online ol
+              newConnection.invoke('SetUserOnline')
+                  .then(() => {
+                      console.log("✅ User online");
+                      loadUsers(token);
+                  })
+                  .catch(err => console.error("❌ SetUserOnline error:", err));
+          })
+          .catch(err => {
+              console.error("❌ Connection failed:", err);
+              setConnectionStatus('failed');
+          });
 
-    newConnection.on('ReceiveMessage', (msg) => {
-         const senderId = msg.senderId || msg.SenderId;
-         const myId = getSafeUserId(userRef.current);
-         const isMyMsg = String(senderId) === String(myId);
-         const isSelected = String(senderId) === String(selectedUserRef.current?.id);
-         
-         if(isMyMsg || isSelected) {
-             setMessages(prev => [...prev, msg]); 
-             if(!isMyMsg && isSelected) playSound('messageReceived');
-         } else {
-             playSound('notification');
-             showNotification(senderId, msg.senderName, msg.content);
-         }
-         
-         setUsers(prev => prev.map(u => {
-           if (u.id === senderId) {
-             return {
-               ...u,
-               lastMessage: msg.content || '📎 Attachment',
-               lastMessageTime: msg.sentAt,
-               unreadCount: isSelected ? 0 : (u.unreadCount || 0) + 1
-             };
-           }
-           if (isMyMsg && u.id === selectedUserRef.current?.id) {
-             return { ...u, lastMessage: msg.content || '📎 Attachment', lastMessageTime: msg.sentAt };
-           }
-           return u;
-         }));
-         
-         loadUsers(tokenRef.current); 
-    });
-    
-    newConnection.on('UserOnline', (id) => setUsers(prev => prev.map(u => u.id === id ? {...u, isOnline: true} : u)));
-    newConnection.on('UserOffline', (id) => setUsers(prev => prev.map(u => u.id === id ? {...u, isOnline: false} : u)));
-    newConnection.on('UserTyping', (id) => { if(selectedUserRef.current?.id === id) setIsTyping(true); });
-    newConnection.on('UserStoppedTyping', (id) => { if(selectedUserRef.current?.id === id) setIsTyping(false); });
+      // ⬇️ YENİDEN BAĞLANMA EVENT'LERİ
+      newConnection.onreconnecting(() => {
+          console.log("🔄 Reconnecting...");
+          setConnectionStatus('connecting');
+      });
 
-    return () => { newConnection.stop(); }
-  }, [token, loadUsers, playSound, showNotification]);
+      newConnection.onreconnected(() => {
+          console.log("✅ Reconnected");
+          setConnectionStatus('connected');
+          newConnection.invoke('SetUserOnline')
+              .then(() => loadUsers(tokenRef.current))
+              .catch(err => console.error("❌ SetUserOnline on reconnect:", err));
+      });
 
+      newConnection.onclose(() => {
+          console.log("❌ Connection closed");
+          setConnectionStatus('disconnected');
+      });
+
+      // ⬇️ MESAJ ALMA
+      newConnection.on('ReceiveMessage', (msg) => {
+          const senderId = msg.senderId || msg.SenderId;
+          const myId = getSafeUserId(userRef.current);
+          const isMyMsg = String(senderId) === String(myId);
+          const isSelected = String(senderId) === String(selectedUserRef.current?.id);
+          
+          // Kendi mesajımızı ekleme (tempMsg zaten ekledi)
+          if (isMyMsg) {
+              setUsers(prev => prev.map(u => {
+                  if (u.id === selectedUserRef.current?.id) {
+                      return { 
+                          ...u, 
+                          lastMessage: msg.content || '📎 Attachment', 
+                          lastMessageTime: msg.sentAt 
+                      };
+                  }
+                  return u;
+              }));
+              loadUsers(tokenRef.current);
+              return;
+          }
+          
+          // Başkasından gelen mesajları işle
+          if (isSelected) {
+              setMessages(prev => [...prev, msg]); 
+              playSound('messageReceived');
+              markAsRead(senderId);
+          } else {
+              playSound('notification');
+              showNotification(senderId, msg.senderName, msg.content);
+          }
+          
+          // User listesini güncelle
+          setUsers(prev => prev.map(u => {
+              if (u.id === senderId) {
+                  return {
+                      ...u,
+                      lastMessage: msg.content || '📎 Attachment',
+                      lastMessageTime: msg.sentAt,
+                      unreadCount: isSelected ? 0 : (u.unreadCount || 0) + 1
+                  };
+              }
+              return u;
+          }));
+          
+          loadUsers(tokenRef.current);
+      });
+      
+      // ⬇️ ONLINE/OFFLINE EVENT'LERİ
+      newConnection.on('UserOnline', (userId) => {
+          console.log(`🟢 User ${userId} online`);
+          setUsers(prev => prev.map(u => 
+              String(u.id) === String(userId) ? { ...u, isOnline: true } : u
+          ));
+      });
+      
+      newConnection.on('UserOffline', (userId) => {
+          console.log(`⚫ User ${userId} offline`);
+          setUsers(prev => prev.map(u => 
+              String(u.id) === String(userId) ? { ...u, isOnline: false } : u
+          ));
+      });
+      
+      // ⬇️ TYPING EVENT'LERİ
+      newConnection.on('UserTyping', (userId) => { 
+          if (String(selectedUserRef.current?.id) === String(userId)) {
+              setIsTyping(true);
+          }
+      });
+      
+      newConnection.on('UserStoppedTyping', (userId) => { 
+          if (String(selectedUserRef.current?.id) === String(userId)) {
+              setIsTyping(false);
+          }
+      });
+
+      // ⬇️ CLEANUP: Bağlantıyı kapat ve offline ol
+      return () => {
+          if (newConnection.state === signalR.HubConnectionState.Connected) {
+              newConnection.invoke('SetUserOffline')
+                  .catch(err => console.error("❌ SetUserOffline error:", err))
+                  .finally(() => {
+                      newConnection.stop();
+                      console.log("🔌 Connection stopped");
+                  });
+          } else {
+              newConnection.stop();
+          }
+      };
+  }, [token, loadUsers, playSound, showNotification, markAsRead]);
+
+  // ⬇️ SELECTED USER DEĞİŞİNCE MESAJLARI YÜKLE
   useEffect(() => { 
-    if(selectedUser && token) loadMessages(selectedUser.id); 
+      if (selectedUser && token) {
+          loadMessages(selectedUser.id);
+          // Typing durumunu sıfırla
+          setIsTyping(false);
+      }
   }, [selectedUser, token, loadMessages]);
 
+  // ⬇️ TYPING NOTIFICATION
   useEffect(() => {
-     if(messageInput && selectedUser && connection) {
-        connection.invoke('NotifyTyping', selectedUser.id).catch(()=>{});
-        if (typingTimeout) clearTimeout(typingTimeout);
-        const timeout = setTimeout(() => {
-            connection.invoke('StopTyping', selectedUser.id).catch(()=>{});
-        }, 2000);
-        setTypingTimeout(timeout);
-     }
-     return () => { if(typingTimeout) clearTimeout(typingTimeout); }
-  }, [messageInput, selectedUser, connection, typingTimeout]);
+      if (!messageInput || !selectedUser || !connection) return;
+      if (connection.state !== signalR.HubConnectionState.Connected) return;
+
+      // Yazıyor bildirimi gönder
+      connection.invoke('NotifyTyping', selectedUser.id).catch(() => {});
+
+      // Timeout ile durmayı bildir
+      const timeout = setTimeout(() => {
+          if (connection.state === signalR.HubConnectionState.Connected) {
+              connection.invoke('StopTyping', selectedUser.id).catch(() => {});
+          }
+      }, 2000);
+
+      return () => {
+          clearTimeout(timeout);
+          // Input temizlendiğinde de stop gönder
+          if (connection?.state === signalR.HubConnectionState.Connected) {
+              connection.invoke('StopTyping', selectedUser.id).catch(() => {});
+          }
+      };
+  }, [messageInput, selectedUser, connection]);
+
+  // ⬇️ TAB GÖRÜNÜRLİK DEĞİŞİNCE (ONLINE/OFFLINE)
+  useEffect(() => {
+      if (!connection) return;
+
+      const handleVisibilityChange = () => {
+          if (connection.state !== signalR.HubConnectionState.Connected) return;
+
+          if (document.hidden) {
+              // Tab gizlendiğinde offline
+              connection.invoke('SetUserOffline')
+                  .then(() => console.log("📱 Tab hidden - offline"))
+                  .catch(console.error);
+          } else {
+              // Tab göründüğünde online
+              connection.invoke('SetUserOnline')
+                  .then(() => {
+                      console.log("📱 Tab visible - online");
+                      loadUsers(tokenRef.current);
+                  })
+                  .catch(console.error);
+          }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+  }, [connection, loadUsers]);
 
   // --- SEND MESSAGE ---
-  const sendMessage = async (e) => {
+const sendMessage = async (e) => {
     e.preventDefault();
+    // Validasyonlar aynı
     if((!messageInput.trim() && !selectedFile) || !selectedUser || !connection) return;
     
     const myId = getSafeUserId(user);
     const content = messageInput.trim();
+    
+    // --- YENİ: Yanıtlanan mesajın ID'sini al ---
+    const replyToId = replyingTo ? replyingTo.id : null;
+
     let attachmentData = null;
 
+    // --- Dosya Yükleme İşlemi (Aynen Kalıyor) ---
     if(selectedFile) {
         setIsUploading(true);
         const formData = new FormData(); 
@@ -435,28 +586,44 @@ function App() {
         }
     }
 
+    // --- YENİ: tempMsg içine replyMessage ekliyoruz ---
+    // Bu sayede backend'den cevap gelmesini beklemeden ekranda yanıtı gösteriyoruz (Optimistic UI)
     const tempMsg = { 
         id: Date.now(), 
         content, 
         senderId: myId, 
         isRead: false, 
         sentAt: new Date().toISOString(), 
-        attachments: attachmentData ? [attachmentData] : [] 
+        attachments: attachmentData ? [attachmentData] : [],
+        // Eğer bir mesaja yanıt veriyorsak, detaylarını buraya ekle:
+        replyMessage: replyingTo ? {
+            id: replyingTo.id,
+            // Gönderen ismini bulmaya çalış, yoksa varsayılan koy
+            senderName: replyingTo.senderName || users.find(u => u.id === replyingTo.senderId)?.fullName || 'User',
+            content: replyingTo.content || (replyingTo.attachments?.length ? '📎 Attachment' : '')
+        } : null
     };
     
     setMessages(prev => [...prev, tempMsg]);
     setMessageInput(''); 
     setSelectedFile(null); 
+    
+    // --- YENİ: Mesaj gittiği an yanıt modundan çık ---
+    setReplyingTo(null); 
+    
     playSound('messageSent');
 
     try {
+        // --- YENİ: Backend'e replyToMessageId gönderiyoruz ---
         await connection.invoke('SendMessage', { 
             receiverId: selectedUser.id, 
             content, 
-            attachment: attachmentData 
+            attachment: attachmentData,
+            replyToMessageId: replyToId // Backend bunu bekliyor
         });
     } catch(e) { 
         showToast('Send failed', 'error'); 
+        // Hata olursa belki tempMsg'yi silmek veya hata göstermek isteyebilirsin
     }
   };
 
@@ -556,6 +723,8 @@ function App() {
               uploadProgress={uploadProgress} 
               isCompressing={isCompressing}
               currentUserId={getSafeUserId(user)} 
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
             />
           )}
         </div>

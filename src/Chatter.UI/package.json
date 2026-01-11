@@ -1,7 +1,7 @@
 {
   "name": "chatter",
   "private": true,
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Chatter Real-time Chat Application",
   "author": {
     "name": "Emin Ates",

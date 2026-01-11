@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Menu, User, Phone, Video, Paperclip, X, Loader2, Send, Smile } from 'lucide-react';
+import { Menu, User, Phone, Video, Paperclip, X, Loader2, Send, Smile, Reply } from 'lucide-react';
 import MessageItem from './MessageItem'; 
 import Ripple from '../Common/Ripple';
 
@@ -23,7 +23,10 @@ const ChatWindow = ({
   uploadProgress,
   isCompressing,
   showProfilePage,
-  currentUserId 
+  currentUserId,
+  // --- YENİ PROPLAR ---
+  replyingTo,
+  setReplyingTo
 }) => {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -32,14 +35,14 @@ const ChatWindow = ({
   // Auto scroll on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, replyingTo]); // replyingTo ekledik, yanıtlayınca aşağı odaklansın
 
-  // Focus input on user change
+  // Focus input on user change or when replying
   useEffect(() => {
-    if (selectedUser && messageInputRef.current && !isMobile) {
+    if ((selectedUser || replyingTo) && messageInputRef.current && !isMobile) {
       setTimeout(() => messageInputRef.current?.focus(), 100);
     }
-  }, [selectedUser, isMobile]);
+  }, [selectedUser, isMobile, replyingTo]);
 
   // --- EMPTY STATE ---
   if (!selectedUser && !showProfilePage) {
@@ -154,6 +157,7 @@ const ChatWindow = ({
             msg={msg}
             currentUserId={currentUserId}
             onImageClick={onImageClick}
+            onReply={setReplyingTo} // Mesajdaki butona basınca state'i güncelle
           />
         ))}
         
@@ -186,6 +190,28 @@ const ChatWindow = ({
                  ></div>
              </div>
          )}
+
+        {/* --- REPLY PREVIEW (YENİ EKLENDİ) --- */}
+        {replyingTo && (
+            <div className="mb-3 p-3 bg-bg-card border-l-4 border-accent-primary rounded-r-xl shadow-soft flex items-center justify-between animate-slide-up">
+                <div className="flex flex-col overflow-hidden mr-3">
+                    <span className="text-xs font-bold text-accent-primary mb-1">
+                        Replying to {replyingTo.senderName || 'User'}
+                    </span>
+                    <span className="text-xs text-text-muted truncate">
+                        {replyingTo.content || (replyingTo.attachments?.length ? '📷 Attachment' : 'Message')}
+                    </span>
+                </div>
+                <button 
+                    type="button" 
+                    onClick={() => setReplyingTo(null)}
+                    className="p-1.5 rounded-full hover:bg-bg-hover text-text-muted transition-colors active:scale-90"
+                    title="Cancel Reply"
+                >
+                    <X size={16} />
+                </button>
+            </div>
+        )}
 
          {/* File Preview */}
          {selectedFile && (
@@ -254,7 +280,7 @@ const ChatWindow = ({
                           sendMessage(e);
                       }
                   }}
-                  placeholder="Type a message..."
+                  placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
                   disabled={connectionStatus !== 'connected'}
                   rows={1}
                   className="w-full px-4 py-3 bg-transparent text-text-main placeholder-text-muted/60 outline-none resize-none max-h-32 min-h-[48px] scrollbar-thin scrollbar-thumb-bg-hover scrollbar-track-transparent"

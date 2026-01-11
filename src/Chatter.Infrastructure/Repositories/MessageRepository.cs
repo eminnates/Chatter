@@ -20,6 +20,7 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
     {
         return await _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
             .Include(m => m.Attachments)
             .Include(m => m.Reactions)
                 .ThenInclude(r => r.User)

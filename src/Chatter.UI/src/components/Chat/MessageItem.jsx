@@ -1,9 +1,9 @@
 import { memo } from 'react';
-import { Video, Phone, File, Maximize2, Check, CheckCheck, Download } from 'lucide-react';
+import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply } from 'lucide-react';
 import SecureImage from '../Common/SecureImage'; 
 import { BACKEND_URL } from '../../config/constants'; 
 
-const MessageItem = memo(({ msg, currentUserId, onImageClick }) => {
+const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply }) => {
   
   // --- ID CHECK ---
   const rawMsgSenderId = msg.senderId || msg.SenderId || '';
@@ -20,6 +20,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick }) => {
       return '';
     }
   };
+
+  // --- REPLY DATA ---
+  // Backend DTO'suna göre replyMessage veya ReplyMessage olabilir
+  const replyData = msg.replyMessage || msg.ReplyMessage;
 
   // --- SYSTEM MESSAGES ---
   if (msg.type === 'System' || msg.type === 2) {
@@ -53,104 +57,146 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick }) => {
   // --- NORMAL MESSAGE ---
   return (
     <div className={`
-      flex flex-col mb-3 w-full animate-slide-up
+      flex flex-col mb-3 w-full animate-slide-up group/message relative
       ${isSentByMe ? 'items-end' : 'items-start'}
     `}>
       
-      {/* --- MESSAGE BUBBLE --- */}
-      <div className={`
-        relative px-4 py-2.5 shadow-soft text-sm break-words transition-all hover:shadow-soft-lg
-        max-w-[85%] md:max-w-[70%] lg:max-w-[600px]
-        ${isSentByMe 
-          ? 'bg-gradient-to-br from-accent-primary to-accent-secondary text-white rounded-2xl rounded-tr-md' 
-          : 'bg-bg-card border border-border-subtle text-text-main rounded-2xl rounded-tl-md'
-        }
-      `}>
+      {/* --- MESSAGE WRAPPER (Bubble + Reply Button) --- */}
+      <div className="relative flex items-center max-w-[85%] md:max-w-[70%] lg:max-w-[600px]">
         
-        {/* --- ATTACHMENTS --- */}
-        {msg.attachments?.map((att, index) => {
-          const isImage = att.type === 1 || 
-                         att.type === 'Image' || 
-                         (att.fileName && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(att.fileName));
+        {/* --- REPLY BUTTON (Shows on Hover) --- */}
+        <button
+          onClick={() => onReply({
+            id: msg.id,
+            senderId: msg.senderId || msg.SenderId,
+            senderName: msg.senderName || msg.SenderName || (isSentByMe ? 'You' : 'User'),
+            content: msg.content,
+            attachments: msg.attachments
+          })}
+          className={`
+            absolute p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted 
+            hover:text-accent-primary hover:bg-accent-light hover:scale-110 active:scale-95
+            opacity-0 group-hover/message:opacity-100 transition-all duration-200 z-10
+            ${isSentByMe ? '-left-12' : '-right-12'}
+          `}
+          title="Reply"
+        >
+          <Reply size={16} />
+        </button>
+
+        {/* --- MESSAGE BUBBLE --- */}
+        <div className={`
+          relative w-full px-4 py-2.5 shadow-soft text-sm break-words transition-all hover:shadow-soft-lg
+          ${isSentByMe 
+            ? 'bg-gradient-to-br from-accent-primary to-accent-secondary text-white rounded-2xl rounded-tr-md' 
+            : 'bg-bg-card border border-border-subtle text-text-main rounded-2xl rounded-tl-md'
+          }
+        `}>
           
-          return (
-            <div key={att.id || index} className={msg.content ? "mb-2.5" : "mb-0"}>
-              {isImage ? (
-                
-                // --- IMAGE ATTACHMENT ---
-                <div 
-                  className="group relative cursor-pointer overflow-hidden rounded-xl border-2 border-transparent hover:border-accent-primary/30 transition-all" 
-                  onClick={() => onImageClick(`${BACKEND_URL}${att.fileUrl}`)}
-                >
-                  <SecureImage 
-                    src={`${BACKEND_URL}${att.fileUrl}`} 
-                    alt={att.fileName || 'Image'} 
-                    className="w-full h-auto max-h-[300px] object-cover" 
-                  />
-                  
-                  {/* Image Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-between p-3">
-                    <span className="text-white text-xs font-medium truncate flex-1">
-                      {att.fileName || 'Image'}
-                    </span>
-                    <Maximize2 size={20} className="text-white drop-shadow-lg flex-shrink-0" />
-                  </div>
-                </div>
-
-              ) : (
-                
-                // --- FILE ATTACHMENT ---
-                <a 
-                  href={`${BACKEND_URL}${att.fileUrl}`} 
-                  download={att.fileName}
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className={`
-                    flex items-center gap-3 p-3 rounded-xl transition-all no-underline group
-                    ${isSentByMe 
-                      ? 'bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40' 
-                      : 'bg-bg-hover/50 hover:bg-bg-hover border border-border-subtle hover:border-accent-primary/40'
-                    }
-                  `}
-                >
-                  {/* File Icon */}
-                  <div className={`
-                    p-2 rounded-lg transition-all
-                    ${isSentByMe 
-                      ? 'bg-white/10 text-white' 
-                      : 'bg-accent-light text-accent-primary'
-                    }
-                  `}>
-                    <File size={18} />
-                  </div>
-                  
-                  {/* File Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${isSentByMe ? 'text-white' : 'text-text-main'}`}>
-                      {att.fileName || 'File'}
-                    </p>
-                    <p className={`text-[10px] ${isSentByMe ? 'text-white/70' : 'text-text-muted'}`}>
-                      Tap to download
-                    </p>
-                  </div>
-                  
-                  {/* Download Icon */}
-                  <Download 
-                    size={16} 
-                    className={`flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity ${isSentByMe ? 'text-white' : 'text-accent-primary'}`} 
-                  />
-                </a>
-              )}
+          {/* --- REPLY CONTEXT (Alıntılanan Mesaj) --- */}
+          {replyData && (
+            <div className={`
+               mb-2 p-2.5 rounded-lg text-xs border-l-4 cursor-pointer select-none
+               flex flex-col gap-0.5
+               ${isSentByMe 
+                  ? 'bg-black/20 border-white/50 text-white/90' 
+                  : 'bg-bg-hover/50 border-accent-primary text-text-muted'
+               }
+            `}>
+                <span className="font-bold opacity-90">
+                    {replyData.senderName || replyData.SenderName || 'User'}
+                </span>
+                <span className="truncate opacity-80 italic">
+                    {replyData.content || (replyData.attachments?.length ? '📷 Attachment' : 'Message')}
+                </span>
             </div>
-          );
-        })}
+          )}
 
-        {/* --- TEXT CONTENT --- */}
-        {msg.content && (
-          <p className="leading-relaxed whitespace-pre-wrap text-[15px]">
-            {msg.content}
-          </p>
-        )}
+          {/* --- ATTACHMENTS --- */}
+          {msg.attachments?.map((att, index) => {
+            const isImage = att.type === 1 || 
+                          att.type === 'Image' || 
+                          (att.fileName && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(att.fileName));
+            
+            return (
+              <div key={att.id || index} className={msg.content ? "mb-2.5" : "mb-0"}>
+                {isImage ? (
+                  
+                  // --- IMAGE ATTACHMENT ---
+                  <div 
+                    className="group relative cursor-pointer overflow-hidden rounded-xl border-2 border-transparent hover:border-accent-primary/30 transition-all" 
+                    onClick={() => onImageClick(`${BACKEND_URL}${att.fileUrl}`)}
+                  >
+                    <SecureImage 
+                      src={`${BACKEND_URL}${att.fileUrl}`} 
+                      alt={att.fileName || 'Image'} 
+                      className="w-full h-auto max-h-[300px] object-cover" 
+                    />
+                    
+                    {/* Image Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-between p-3">
+                      <span className="text-white text-xs font-medium truncate flex-1">
+                        {att.fileName || 'Image'}
+                      </span>
+                      <Maximize2 size={20} className="text-white drop-shadow-lg flex-shrink-0" />
+                    </div>
+                  </div>
+
+                ) : (
+                  
+                  // --- FILE ATTACHMENT ---
+                  <a 
+                    href={`${BACKEND_URL}${att.fileUrl}`} 
+                    download={att.fileName}
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className={`
+                      flex items-center gap-3 p-3 rounded-xl transition-all no-underline group
+                      ${isSentByMe 
+                        ? 'bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40' 
+                        : 'bg-bg-hover/50 hover:bg-bg-hover border border-border-subtle hover:border-accent-primary/40'
+                      }
+                    `}
+                  >
+                    {/* File Icon */}
+                    <div className={`
+                      p-2 rounded-lg transition-all
+                      ${isSentByMe 
+                        ? 'bg-white/10 text-white' 
+                        : 'bg-accent-light text-accent-primary'
+                      }
+                    `}>
+                      <File size={18} />
+                    </div>
+                    
+                    {/* File Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium truncate ${isSentByMe ? 'text-white' : 'text-text-main'}`}>
+                        {att.fileName || 'File'}
+                      </p>
+                      <p className={`text-[10px] ${isSentByMe ? 'text-white/70' : 'text-text-muted'}`}>
+                        Tap to download
+                      </p>
+                    </div>
+                    
+                    {/* Download Icon */}
+                    <Download 
+                      size={16} 
+                      className={`flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity ${isSentByMe ? 'text-white' : 'text-accent-primary'}`} 
+                    />
+                  </a>
+                )}
+              </div>
+            );
+          })}
+
+          {/* --- TEXT CONTENT --- */}
+          {msg.content && (
+            <p className="leading-relaxed whitespace-pre-wrap text-[15px]">
+              {msg.content}
+            </p>
+          )}
+        </div>
       </div>
       
       {/* --- TIME & STATUS --- */}
