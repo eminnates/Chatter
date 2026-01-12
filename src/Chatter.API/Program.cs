@@ -66,7 +66,6 @@ builder.Services.AddCors(options =>
         policy => policy
             .SetIsOriginAllowed(origin => 
             {
-                // Allow all localhost variants and Capacitor schemes
                 if (origin.StartsWith("http://localhost") || 
                     origin.StartsWith("https://localhost") ||
                     origin.StartsWith("capacitor://") ||
@@ -76,12 +75,14 @@ builder.Services.AddCors(options =>
                 {
                     return true;
                 }
-                // Allow configured origins
                 return corsOrigins.Contains(origin);
             })
             .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials());
+            .AllowCredentials() // Bu olduğu için Header'ları açıkça belirtmek daha güvenlidir
+            // DEĞİŞİKLİK BURADA:
+            .WithHeaders("Authorization", "Content-Type", "ngrok-skip-browser-warning", "x-requested-with", "origin", "accept")
+            // Alternatif olarak AllowAnyHeader() kalsa bile, Authorization'ı garantiye almak için üsttekini kullanıyoruz.
+    );
 });
 
 // Build connection string from environment variables

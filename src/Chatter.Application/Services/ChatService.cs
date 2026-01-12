@@ -15,6 +15,46 @@ public class ChatService : IChatService
         _unitOfWork = unitOfWork;
     }
 
+    public async Task<Result<MessageDto?>> GetLastMessageAsync(Guid conversationId)
+    {
+        // Son mesajı (silinmiş dahil) getir
+        var message = await _unitOfWork.Messages.GetLastMessageAsync(conversationId);
+        if (message == null)
+            return Result<MessageDto?>.Success(null);
+
+        var replyDto = message.ReplyToMessage != null ? new ReplyMessageDto
+        {
+            Id = message.ReplyToMessage.Id,
+            SenderId = message.ReplyToMessage.SenderId,
+            SenderName = message.ReplyToMessage.Sender?.FullName ?? message.ReplyToMessage.Sender?.UserName ?? string.Empty,
+            Content = message.ReplyToMessage.Content
+        } : null;
+
+        var dto = new MessageDto
+        {
+            Id = message.Id,
+            ConversationId = message.ConversationId,
+            SenderId = message.SenderId,
+            SenderName = message.Sender?.FullName ?? message.Sender?.UserName ?? "Unknown",
+            Content = message.Content,
+            Type = message.Type.ToString(),
+            SentAt = message.SentAt,
+            IsRead = message.Status == MessageStatus.Read,
+            ReplyToMessageId = message.ReplyToMessageId,
+            ReplyMessage = replyDto,
+            Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
+            {
+                FileName = a.FileName,
+                FileUrl = a.FileUrl,
+                Type = a.Type.ToString()
+            }).ToList(),
+            // HATA DÜZELTME: Reaction property'si henüz tanımlı olmadığı için burayı boş liste dönüyoruz.
+            // İleride Entity ve DTO'ya 'Reaction' veya 'Type' alanı eklenirse burayı açabilirsin.
+            Reactions = new List<MessageReactionDto>() 
+        };
+        return Result<MessageDto?>.Success(dto);
+    }
+
     public async Task<Result<MessageDto>> SendMessageAsync(SendMessageRequest request, Guid senderId)
     {
         await _unitOfWork.BeginTransactionAsync();
@@ -103,7 +143,7 @@ public class ChatService : IChatService
             await _unitOfWork.SaveChangesAsync();
             await _unitOfWork.CommitTransactionAsync();
 
-            // 4. DTO DÖNDÜR (BURASI KRİTİK: Attachments eklendi)
+            // 4. DTO DÖNDÜR
             ReplyMessageDto? replyDto = null;
             if (message.ReplyToMessageId.HasValue)
             {
@@ -131,7 +171,6 @@ public class ChatService : IChatService
                 IsRead = false,
                 ReplyToMessageId = message.ReplyToMessageId,
                 ReplyMessage = replyDto,
-                // ANLIK GÖRÜNTÜ İÇİN EKLERİ BURAYA DA EKLEMELİSİN
                 Attachments = message.Attachments.Select(a => new MessageAttachmentDto {
                     FileName = a.FileName,
                     FileUrl = a.FileUrl,
@@ -167,7 +206,6 @@ public class ChatService : IChatService
             Type = m.Type.ToString(),
             SentAt = m.SentAt,
             IsRead = m.Status == MessageStatus.Read,
-            // DÜZELTME (HATA 2): .ToString() kaldırıldı
             ReplyToMessageId = m.ReplyToMessageId,
             ReplyMessage = m.ReplyToMessage != null ? new ReplyMessageDto
             {
@@ -177,9 +215,9 @@ public class ChatService : IChatService
                 Content = m.ReplyToMessage.Content
             } : null,
             Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
-            FileUrl = a.FileUrl,
-            FileName = a.FileName,
-            Type = a.Type.ToString()
+                FileUrl = a.FileUrl,
+                FileName = a.FileName,
+                Type = a.Type.ToString()
             }).ToList(),
         });
 
@@ -211,7 +249,6 @@ public class ChatService : IChatService
                     Content = c.LastMessage.Content,
                     SentAt = c.LastMessage.SentAt,
                     IsRead = c.LastMessage.Status == MessageStatus.Read,
-                    // DÜZELTME (HATA 3): .ToString() kaldırıldı
                     ReplyToMessageId = c.LastMessage.ReplyToMessageId,
                     ReplyMessage = c.LastMessage.ReplyToMessage != null ? new ReplyMessageDto
                     {

@@ -24,4 +24,6 @@ public interface IChatService
     // 5. Özel Sohbet Oluşturma/Getirme:
     // Sohbet ID'si döneceği için Result<Guid>
     Task<Result<Guid>> CreatePrivateConversationAsync(Guid senderId, Guid receiverId);
+    // 6. Son Mesajı Getir
+    Task<Result<MessageDto?>> GetLastMessageAsync(Guid conversationId);
 }

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.SignalR;
 namespace Chatter.API.Controllers;
 
 [Authorize]
-public class ChatController : BaseApiController // ControllerBase yerine BaseApiController
+public class ChatController : BaseApiController
 {
     private readonly IChatService _chatService;
     private readonly IHubContext<ChatHub> _hubContext;
@@ -27,10 +27,7 @@ public class ChatController : BaseApiController // ControllerBase yerine BaseApi
         if (!TryGetCurrentUserId(out var currentUserId))
             return Unauthorized();
 
-        // Servis Result<Guid> dönüyor
         var result = await _chatService.CreatePrivateConversationAsync(currentUserId, targetUserId);
-        
-        // HandleResult: Başarılıysa Ok(Guid), başarısızsa BadRequest(Error) döner
         return HandleResult(result);
     }
 
@@ -42,7 +39,6 @@ public class ChatController : BaseApiController // ControllerBase yerine BaseApi
             return Unauthorized();
 
         var result = await _chatService.GetUserConversationsAsync(currentUserId);
-        
         return HandleResult(result);
     }
 
@@ -54,7 +50,6 @@ public class ChatController : BaseApiController // ControllerBase yerine BaseApi
             return Unauthorized();
 
         var result = await _chatService.GetConversationMessagesAsync(conversationId, page, pageSize, currentUserId);
-
         return HandleResult(result);
     }
 
@@ -66,40 +61,50 @@ public class ChatController : BaseApiController // ControllerBase yerine BaseApi
             return Unauthorized();
 
         var result = await _chatService.SendMessageAsync(request, currentUserId);
-
         return HandleResult(result);
     }
 
     // 5. OKUNDU İŞARETLEME
-    // Frontend'den gelen string ID'yi Guid olarak alıyoruz (ASP.NET otomatik çevirir)
     [HttpPost("mark-read/{senderId}")]
     public async Task<IActionResult> MarkAsRead(Guid senderId)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
             return Unauthorized();
 
-        // A) Önce bu iki kişi arasındaki sohbet ID'sini bul
-        // Not: CreatePrivateConversationAsync mevcut sohbet varsa ID'sini döner
+        // A) Önce sohbet ID'sini bul
         var convResult = await _chatService.CreatePrivateConversationAsync(currentUserId, senderId);
         
         if (!convResult.IsSuccess) 
-            return HandleResult(convResult); // Hata varsa dön
+            return HandleResult(convResult);
 
-        // B) Mesajları veritabanında "Okundu" yap
+        // B) Mesajları "Okundu" yap
         var readResult = await _chatService.MarkMessagesAsReadAsync(convResult.Value, currentUserId);
 
         if (readResult.IsSuccess)
         {
-            // C) SignalR ile karşı tarafa (mesajı atana) "Görüldü" haberi yolla
-            // SignalR user ID'leri genelde string tutar, o yüzden ToString()
+            // C) SignalR ile karşı tarafa bildirim yolla
             await _hubContext.Clients.User(senderId.ToString()).SendAsync("MessagesRead", currentUserId);
         }
 
         return HandleResult(readResult);
     }
 
+    // 6. Son Mesajı Getir (Sınıfın İÇİNE ALINDI)
+    [HttpGet("last-message/{conversationId}")]
+    public async Task<IActionResult> GetLastMessage(Guid conversationId)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.GetLastMessageAsync(conversationId);
+        
+        // Backend'de message null ise Success(null) dönüyorduk.
+        // BaseApiController'daki HandleResult muhtemelen null gelince 404 dönüyor.
+        // Frontend bunu handle ettiği için sorun yok.
+        return HandleResult(result);
+    }
+
     // --- Yardımcı Metot ---
-    // Bunu BaseApiController içine de taşıyabilirsin, burada private olarak da kalabilir.
     private bool TryGetCurrentUserId(out Guid userId)
     {
         userId = Guid.Empty;

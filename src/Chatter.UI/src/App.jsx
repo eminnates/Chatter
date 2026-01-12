@@ -18,7 +18,7 @@ import OutgoingCallScreen from './components/Call/OutgoingCallScreen'
 import ProfilePage from './components/Profile/ProfilePage'
 import Lightbox from './components/Common/Lightbox'
 import Toast from './components/Common/Toast'
-import TitleBar from './components/Common/TitleBar' // TitleBar path'ini kontrol et
+import TitleBar from './components/Common/TitleBar'
 
 // --- HOOKS ---
 import { useWebRTC } from './hooks/useWebRTC'
@@ -58,14 +58,16 @@ function App() {
   const [connection, setConnection] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [selectedFile, setSelectedFile] = useState(null)
+  
+  // --- REPLY STATE ---
   const [replyingTo, setReplyingTo] = useState(null)
+  
   const [lightboxImage, setLightboxImage] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [isCompressing, setIsCompressing] = useState(false)
   const [toast, setToast] = useState(null)
   const [isTyping, setIsTyping] = useState(false)
-  const [typingTimeout, setTypingTimeout] = useState(null)
   const [showProfilePage, setShowProfilePage] = useState(false)
   const [viewProfileUserId, setViewProfileUserId] = useState(null)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
@@ -78,7 +80,6 @@ function App() {
   const selectedUserRef = useRef(null) 
   const userRef = useRef(user)
   const usersRef = useRef(users)
-  
   const connectionRef = useRef(connection);
   const tokenRef = useRef(token);
   const lightboxImageRef = useRef(lightboxImage);
@@ -101,6 +102,15 @@ function App() {
     setTimeout(() => setToast(null), duration)
   }, [])
 
+  // === LOGOUT ===
+  const logout = async () => {
+     if(connection) try { await connection.stop(); } catch {}
+     localStorage.removeItem('token'); 
+     localStorage.removeItem('user');
+     setToken(null); 
+     setUser(null);
+  }
+
   // === SOUND ===
   const playSound = useCallback((soundName) => {
     if (soundEnabled && sounds[soundName]) sounds[soundName]()
@@ -108,13 +118,61 @@ function App() {
 
   // === DATA LOADERS ===
   const loadUsers = useCallback(async (activeToken) => {
+    if (!activeToken) return;
+
     try {
+      console.log("🚀 Kullanıcılar yükleniyor...");
       const { data } = await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${activeToken}` } })
-      setUsers(Array.isArray(data) ? data : (data.data || []))
+      const userList = Array.isArray(data) ? data : (data.data || []);
+      
+      setUsers(userList);
+
+      const usersWithLastMessages = await Promise.all(userList.map(async (u) => {
+        try {
+          let convId = u.conversationId; 
+          if (!convId) {
+             const convRes = await axios.post(`${API_URL}/chat/conversation/${u.id}`, {}, { 
+                headers: { Authorization: `Bearer ${activeToken}` } 
+             });
+             convId = convRes.data.value || convRes.data.id || convRes.data;
+          }
+
+          if (convId) {
+            try {
+                const lastMsgRes = await axios.get(`${API_URL}/chat/last-message/${convId}`, {
+                  headers: { Authorization: `Bearer ${activeToken}` }
+                });
+                
+                const rawData = lastMsgRes.data;
+                const lastMsg = rawData.data || rawData.value || rawData;
+
+                if (lastMsg) {
+                  const content = lastMsg.content || lastMsg.Content;
+                  const attachments = lastMsg.attachments || lastMsg.Attachments;
+                  const sentAt = lastMsg.sentAt || lastMsg.SentAt;
+
+                  return {
+                    ...u,
+                    lastMessage: content || (attachments?.length > 0 ? '📷 Photo' : 'Message'),
+                    lastMessageTime: sentAt
+                  };
+                }
+            } catch (msgError) {
+                // 404 Mesaj yok, normal.
+            }
+          }
+        } catch (err) {
+           console.error(`User process error for ${u.userName}:`, err);
+        }
+        return u;
+      }));
+
+      setUsers(usersWithLastMessages);
     } catch (error) {
+       console.error("Load users fatal error:", error);
        if (error.response?.status === 401) logout();
     }
-  }, [])
+  }, []);
 
   const loadMessages = useCallback(async (userId) => {
     if (!token) return;
@@ -129,7 +187,6 @@ function App() {
       
       setMessages(allMessages);
       
-      // Son mesajı user listesine işle
       if (allMessages.length > 0) {
         const lastMsg = allMessages[allMessages.length - 1];
         setUsers(prev => prev.map(u => 
@@ -158,7 +215,6 @@ function App() {
     if(isMobile) setIsMobileSidebarOpen(false);
   }, [markAsRead, isMobile]);
 
-  // === NOTIFICATIONS (DÜZELTİLEN KISIM) ===
   const requestNotificationPermission = useCallback(async () => {
     if (Capacitor.isNativePlatform()) {
       try { await LocalNotifications.requestPermissions() } catch (err) {}
@@ -169,49 +225,22 @@ function App() {
 
   const showNotification = useCallback(async (senderId, senderName, messageContent) => {
     await triggerHaptic(ImpactStyle.Light)
-    
-    // DESKTOP & WEB
     if (!Capacitor.isNativePlatform() && 'Notification' in window && Notification.permission === 'granted') {
        const notif = new Notification(senderName, { 
          body: messageContent, 
          icon: '/icon.png',
          silent: true 
        });
-       
-       // TIKLAMA OLAYI
        notif.onclick = () => {
          window.focus();
-         // usersRef.current içinden kullanıcıyı bul
          const targetUser = usersRef.current.find(u => u.id === senderId);
-         if (targetUser) {
-           handleSelectUser(targetUser);
-         }
+         if (targetUser) handleSelectUser(targetUser);
          notif.close();
        };
     }
-    
-    // MOBILE
-    if (Capacitor.isNativePlatform()) {
-       // Mobil bildirim mantığı buraya...
-    }
-  }, [handleSelectUser]) // handleSelectUser eklendi
+  }, [handleSelectUser])
 
-  // === ACTIONS: Refresh & Swipe ===
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await loadUsers(token)
-    if (selectedUser) await loadMessages(selectedUser.id)
-    setRefreshing(false)
-    triggerHaptic(ImpactStyle.Light)
-  }
-
-  const handleSwipeRight = () => {
-    if (isMobile && !isMobileSidebarOpen) {
-      setIsMobileSidebarOpen(true)
-    }
-  }
-
-  // === SYNC REFS ===
+  // === REFS & LISTENERS ===
   useEffect(() => {
     connectionRef.current = connection;
     tokenRef.current = token;
@@ -223,16 +252,13 @@ function App() {
     usersRef.current = users;
   }, [connection, token, lightboxImage, isMobileSidebarOpen, showProfilePage, selectedUser, user, users]);
 
-  // === NATIVE LISTENERS ===
   useEffect(() => {
     const init = async () => {
-        // 1. Mobil Platform Kontrolü
         if(Capacitor.isNativePlatform()) {
             document.body.classList.add('is-mobile');
             await SplashScreen.hide();
             await Keyboard.setResizeMode({ mode: KeyboardResize.Native }).catch(() => {});
             
-            // App State (Arka plan / Ön plan) Dinleyicisi
             CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
                 setIsAppActive(isActive);
                 const conn = connectionRef.current;
@@ -246,7 +272,6 @@ function App() {
                 }
             });
 
-            // Geri Tuşu Dinleyicisi
             CapacitorApp.addListener('backButton', ({ canGoBack }) => {
                 if(lightboxImageRef.current) { setLightboxImage(null); return; }
                 if(isMobileSidebarOpenRef.current) { setIsMobileSidebarOpen(false); return; }
@@ -254,49 +279,31 @@ function App() {
                 if(!canGoBack) CapacitorApp.exitApp(); else window.history.back();
             });
 
-            // --- YENİ EKLENEN KISIM: ANDROID GÜNCELLEME KONTROLÜ ---
             if (Capacitor.getPlatform() === 'android') {
-                // Uygulama açıldıktan 3 saniye sonra kontrol etsin (Hemen ekrana fırlamasın)
-                setTimeout(() => {
-                    checkAndroidUpdate(showToast);
-                }, 3000);
+                setTimeout(() => { checkAndroidUpdate(showToast); }, 3000);
             }
-            // -------------------------------------------------------
         }
-        
-        // 2. Electron Kontrolü
-        if (window.electronAPI?.isElectron) {
-            document.body.classList.add('is-electron');
-        }
+        if (window.electronAPI?.isElectron) document.body.classList.add('is-electron');
     }
     init();
-  }, [loadUsers, showToast]); // showToast'u dependency'e ekledik
+  }, [loadUsers, showToast]);
 
-  // Connection Toast Logic
   useEffect(() => {
     if (connectionStatus === 'connected') {
-      if (isFirstConnection) {
-        setIsFirstConnection(false)
-      } else {
-        showToast('Reconnected', 'success')
-        playSound('connect')
-      }
+      if (isFirstConnection) setIsFirstConnection(false)
+      else { showToast('Reconnected', 'success'); playSound('connect') }
     } else if (connectionStatus === 'failed') {
       showToast('Connection lost. Retrying...', 'error')
     }
   }, [connectionStatus, isFirstConnection, showToast, playSound])
 
-  // Theme Transition
   useEffect(() => {
     document.documentElement.classList.add('theme-transitioning')
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
-    setTimeout(() => {
-      document.documentElement.classList.remove('theme-transitioning')
-    }, 300)
+    setTimeout(() => { document.documentElement.classList.remove('theme-transitioning') }, 300)
   }, [theme])
 
-  // Mobile Check
   useEffect(() => {
       const checkMobile = () => setIsMobile(window.innerWidth <= 768);
       checkMobile();
@@ -304,7 +311,6 @@ function App() {
       return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Notification Request
   useEffect(() => {
     if (token && !localStorage.getItem('notificationAsked')) {
       setTimeout(() => {
@@ -337,65 +343,34 @@ function App() {
               skipNegotiation: true, 
               transport: signalR.HttpTransportType.WebSockets 
           })
-          .withAutomaticReconnect({
-              nextRetryDelayInMilliseconds: retryContext => {
-                  if (retryContext.elapsedMilliseconds < 60000) {
-                      return Math.random() * 2000;
-                  } else {
-                      return 5000;
-                  }
-              }
-          })
+          .withAutomaticReconnect()
           .configureLogging(signalR.LogLevel.Information)
           .build();
 
-      // ⬇️ BAĞLANTI KURULUNCA
       newConnection.start()
           .then(() => {
               setConnection(newConnection);
               setConnectionStatus('connected');
-              console.log("✅ SignalR Connected");
-              
-              // ⬇️ Bağlanınca online ol
-              newConnection.invoke('SetUserOnline')
-                  .then(() => {
-                      console.log("✅ User online");
-                      loadUsers(token);
-                  })
-                  .catch(err => console.error("❌ SetUserOnline error:", err));
+              newConnection.invoke('SetUserOnline').then(() => loadUsers(token)).catch(console.error);
           })
           .catch(err => {
               console.error("❌ Connection failed:", err);
               setConnectionStatus('failed');
           });
 
-      // ⬇️ YENİDEN BAĞLANMA EVENT'LERİ
-      newConnection.onreconnecting(() => {
-          console.log("🔄 Reconnecting...");
-          setConnectionStatus('connecting');
-      });
-
       newConnection.onreconnected(() => {
-          console.log("✅ Reconnected");
           setConnectionStatus('connected');
-          newConnection.invoke('SetUserOnline')
-              .then(() => loadUsers(tokenRef.current))
-              .catch(err => console.error("❌ SetUserOnline on reconnect:", err));
+          newConnection.invoke('SetUserOnline').then(() => loadUsers(tokenRef.current));
       });
 
-      newConnection.onclose(() => {
-          console.log("❌ Connection closed");
-          setConnectionStatus('disconnected');
-      });
+      newConnection.onclose(() => setConnectionStatus('disconnected'));
 
-      // ⬇️ MESAJ ALMA
       newConnection.on('ReceiveMessage', (msg) => {
           const senderId = msg.senderId || msg.SenderId;
           const myId = getSafeUserId(userRef.current);
           const isMyMsg = String(senderId) === String(myId);
           const isSelected = String(senderId) === String(selectedUserRef.current?.id);
           
-          // Kendi mesajımızı ekleme (tempMsg zaten ekledi)
           if (isMyMsg) {
               setUsers(prev => prev.map(u => {
                   if (u.id === selectedUserRef.current?.id) {
@@ -411,7 +386,6 @@ function App() {
               return;
           }
           
-          // Başkasından gelen mesajları işle
           if (isSelected) {
               setMessages(prev => [...prev, msg]); 
               playSound('messageReceived');
@@ -421,7 +395,6 @@ function App() {
               showNotification(senderId, msg.senderName, msg.content);
           }
           
-          // User listesini güncelle
           setUsers(prev => prev.map(u => {
               if (u.id === senderId) {
                   return {
@@ -433,131 +406,79 @@ function App() {
               }
               return u;
           }));
-          
           loadUsers(tokenRef.current);
       });
       
-      // ⬇️ ONLINE/OFFLINE EVENT'LERİ
       newConnection.on('UserOnline', (userId) => {
-          console.log(`🟢 User ${userId} online`);
-          setUsers(prev => prev.map(u => 
-              String(u.id) === String(userId) ? { ...u, isOnline: true } : u
-          ));
+          setUsers(prev => prev.map(u => String(u.id) === String(userId) ? { ...u, isOnline: true } : u));
       });
       
       newConnection.on('UserOffline', (userId) => {
-          console.log(`⚫ User ${userId} offline`);
-          setUsers(prev => prev.map(u => 
-              String(u.id) === String(userId) ? { ...u, isOnline: false } : u
-          ));
+          setUsers(prev => prev.map(u => String(u.id) === String(userId) ? { ...u, isOnline: false } : u));
       });
       
-      // ⬇️ TYPING EVENT'LERİ
       newConnection.on('UserTyping', (userId) => { 
-          if (String(selectedUserRef.current?.id) === String(userId)) {
-              setIsTyping(true);
-          }
+          if (String(selectedUserRef.current?.id) === String(userId)) setIsTyping(true);
       });
       
       newConnection.on('UserStoppedTyping', (userId) => { 
-          if (String(selectedUserRef.current?.id) === String(userId)) {
-              setIsTyping(false);
-          }
+          if (String(selectedUserRef.current?.id) === String(userId)) setIsTyping(false);
       });
 
-      // ⬇️ CLEANUP: Bağlantıyı kapat ve offline ol
       return () => {
           if (newConnection.state === signalR.HubConnectionState.Connected) {
-              newConnection.invoke('SetUserOffline')
-                  .catch(err => console.error("❌ SetUserOffline error:", err))
-                  .finally(() => {
-                      newConnection.stop();
-                      console.log("🔌 Connection stopped");
-                  });
+              newConnection.invoke('SetUserOffline').catch(console.error).finally(() => newConnection.stop());
           } else {
               newConnection.stop();
           }
       };
   }, [token, loadUsers, playSound, showNotification, markAsRead]);
 
-  // ⬇️ SELECTED USER DEĞİŞİNCE MESAJLARI YÜKLE
   useEffect(() => { 
       if (selectedUser && token) {
           loadMessages(selectedUser.id);
-          // Typing durumunu sıfırla
           setIsTyping(false);
       }
   }, [selectedUser, token, loadMessages]);
 
-  // ⬇️ TYPING NOTIFICATION
+  // Typing Notification
   useEffect(() => {
-      if (!messageInput || !selectedUser || !connection) return;
-      if (connection.state !== signalR.HubConnectionState.Connected) return;
-
-      // Yazıyor bildirimi gönder
+      if (!messageInput || !selectedUser || !connection || connection.state !== signalR.HubConnectionState.Connected) return;
       connection.invoke('NotifyTyping', selectedUser.id).catch(() => {});
-
-      // Timeout ile durmayı bildir
       const timeout = setTimeout(() => {
-          if (connection.state === signalR.HubConnectionState.Connected) {
-              connection.invoke('StopTyping', selectedUser.id).catch(() => {});
-          }
+          if (connection.state === signalR.HubConnectionState.Connected) connection.invoke('StopTyping', selectedUser.id).catch(() => {});
       }, 2000);
-
       return () => {
           clearTimeout(timeout);
-          // Input temizlendiğinde de stop gönder
-          if (connection?.state === signalR.HubConnectionState.Connected) {
-              connection.invoke('StopTyping', selectedUser.id).catch(() => {});
-          }
+          if (connection?.state === signalR.HubConnectionState.Connected) connection.invoke('StopTyping', selectedUser.id).catch(() => {});
       };
   }, [messageInput, selectedUser, connection]);
 
-  // ⬇️ TAB GÖRÜNÜRLİK DEĞİŞİNCE (ONLINE/OFFLINE)
+  // Tab Visibility
   useEffect(() => {
       if (!connection) return;
-
       const handleVisibilityChange = () => {
           if (connection.state !== signalR.HubConnectionState.Connected) return;
-
-          if (document.hidden) {
-              // Tab gizlendiğinde offline
-              connection.invoke('SetUserOffline')
-                  .then(() => console.log("📱 Tab hidden - offline"))
-                  .catch(console.error);
-          } else {
-              // Tab göründüğünde online
-              connection.invoke('SetUserOnline')
-                  .then(() => {
-                      console.log("📱 Tab visible - online");
-                      loadUsers(tokenRef.current);
-                  })
-                  .catch(console.error);
-          }
+          if (document.hidden) connection.invoke('SetUserOffline').catch(console.error);
+          else connection.invoke('SetUserOnline').then(() => loadUsers(tokenRef.current)).catch(console.error);
       };
-
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      return () => {
-          document.removeEventListener('visibilitychange', handleVisibilityChange);
-      };
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [connection, loadUsers]);
 
-  // --- SEND MESSAGE ---
-const sendMessage = async (e) => {
+  // === SEND MESSAGE FUNCTION (OPTIMIZED FOR REPLY) ===
+  const sendMessage = async (e) => {
     e.preventDefault();
-    // Validasyonlar aynı
     if((!messageInput.trim() && !selectedFile) || !selectedUser || !connection) return;
     
     const myId = getSafeUserId(user);
     const content = messageInput.trim();
     
-    // --- YENİ: Yanıtlanan mesajın ID'sini al ---
+    // 1. Yanıtlanacak ID'yi sakla
     const replyToId = replyingTo ? replyingTo.id : null;
 
     let attachmentData = null;
 
-    // --- Dosya Yükleme İşlemi (Aynen Kalıyor) ---
     if(selectedFile) {
         setIsUploading(true);
         const formData = new FormData(); 
@@ -566,10 +487,7 @@ const sendMessage = async (e) => {
         try {
             const res = await axios.post(`${API_URL}/files/upload`, formData, {
                 headers: { Authorization: `Bearer ${token}` },
-                onUploadProgress: (progressEvent) => {
-                    const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-                    setUploadProgress(percent)
-                }
+                onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded * 100) / p.total))
             });
             attachmentData = { 
                 fileName: res.data.fileName, 
@@ -581,13 +499,11 @@ const sendMessage = async (e) => {
         } catch(error) {
             showToast('Upload failed', 'error');
             setIsUploading(false);
-            setUploadProgress(0);
             return;
         }
     }
 
-    // --- YENİ: tempMsg içine replyMessage ekliyoruz ---
-    // Bu sayede backend'den cevap gelmesini beklemeden ekranda yanıtı gösteriyoruz (Optimistic UI)
+    // 2. Optimistic UI için geçici mesaj oluştur
     const tempMsg = { 
         id: Date.now(), 
         content, 
@@ -595,45 +511,35 @@ const sendMessage = async (e) => {
         isRead: false, 
         sentAt: new Date().toISOString(), 
         attachments: attachmentData ? [attachmentData] : [],
-        // Eğer bir mesaja yanıt veriyorsak, detaylarını buraya ekle:
+        // Alıntılanan mesajı UI'da hemen göster
         replyMessage: replyingTo ? {
             id: replyingTo.id,
-            // Gönderen ismini bulmaya çalış, yoksa varsayılan koy
+            // Gönderen ismi yoksa user listesinden bul
             senderName: replyingTo.senderName || users.find(u => u.id === replyingTo.senderId)?.fullName || 'User',
-            content: replyingTo.content || (replyingTo.attachments?.length ? '📎 Attachment' : '')
+            // İçerik yoksa (sadece fotoyse) belirteç koy
+            content: replyingTo.content || (replyingTo.attachments?.length ? '📷 Photo' : '')
         } : null
     };
     
     setMessages(prev => [...prev, tempMsg]);
     setMessageInput(''); 
     setSelectedFile(null); 
-    
-    // --- YENİ: Mesaj gittiği an yanıt modundan çık ---
-    setReplyingTo(null); 
+    setReplyingTo(null); // Mesaj gittiği an reply modundan çık
     
     playSound('messageSent');
 
     try {
-        // --- YENİ: Backend'e replyToMessageId gönderiyoruz ---
         await connection.invoke('SendMessage', { 
             receiverId: selectedUser.id, 
             content, 
             attachment: attachmentData,
-            replyToMessageId: replyToId // Backend bunu bekliyor
+            replyToMessageId: replyToId // Backend DTO ile eşleşmeli
         });
     } catch(e) { 
         showToast('Send failed', 'error'); 
-        // Hata olursa belki tempMsg'yi silmek veya hata göstermek isteyebilirsin
+        console.error(e);
     }
   };
-
-  const logout = async () => {
-     if(connection) try { await connection.stop(); } catch {}
-     localStorage.removeItem('token'); 
-     localStorage.removeItem('user');
-     setToken(null); 
-     setUser(null);
-  }
 
   const handleAuthSuccess = (responseData) => {
     const receivedToken = responseData.token || responseData.data?.token || responseData.accessToken;
@@ -650,12 +556,9 @@ const sendMessage = async (e) => {
         localStorage.setItem('user', JSON.stringify(userData));
         setToken(receivedToken);
         setUser(userData);
-    } else {
-        console.error("Auth success but missing data:", responseData);
     }
   };
 
-  // === RENDER ===
   if (!token) return <AuthScreen onAuthSuccess={handleAuthSuccess} />
 
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -663,9 +566,7 @@ const sendMessage = async (e) => {
   return (
     <>
       <TitleBar />
-
       <div className={`flex w-screen bg-bg-main overflow-hidden ${isElectron ? 'h-[calc(100vh-32px)]' : 'h-full'}`}>
-        
         <Toast toast={toast} />
 
         {isMobile && (
