@@ -85,6 +85,7 @@ function App() {
   const lightboxImageRef = useRef(lightboxImage);
   const isMobileSidebarOpenRef = useRef(isMobileSidebarOpen);
   const showProfilePageRef = useRef(showProfilePage);
+  const soundEnabledRef = useRef(soundEnabled);
 
   // === HELPER: GET SAFE USER ID ===
   const getSafeUserId = (u) => {
@@ -113,8 +114,11 @@ function App() {
 
   // === SOUND ===
   const playSound = useCallback((soundName) => {
-    if (soundEnabled && sounds[soundName]) sounds[soundName]()
-  }, [soundEnabled])
+    // soundEnabled yerine soundEnabledRef.current kullanıyoruz
+    if (soundEnabledRef.current && sounds[soundName]) {
+      sounds[soundName]();
+    }
+  }, []);
 
   // === DATA LOADERS ===
   const loadUsers = useCallback(async (activeToken) => {
@@ -320,6 +324,9 @@ function App() {
     }
   }, [token, requestNotificationPermission])
 
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
   // === WEBRTC ===
   const { localStream, remoteStream, callStatus, activeCall, initiateCall, acceptCall, declineCall, endCall, toggleAudio, toggleVideo } = useWebRTC(connection, getSafeUserId(user), showToast, showNotification)
 
