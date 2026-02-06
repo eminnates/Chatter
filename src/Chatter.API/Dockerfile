@@ -17,3 +17,9 @@ WORKDIR /app
 COPY --from=build /app/publish .
 # Statik dosyalar için wwwroot klasörü oluştur
 RUN mkdir -p wwwroot/uploads
+
+# Render'ın PORT değişkenini dinle
+ENV ASPNETCORE_URLS=http://0.0.0.0:$PORT
+
+# Container başlangıcı
+ENTRYPOINT ["dotnet", "Chatter.API.dll"]
