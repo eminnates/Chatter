@@ -507,3 +507,88 @@ body.is-mobile .container {
     transform: scale(0.98);
   }
 }
+
+/* ========================================
+   🚀 GPU ACCELERATION & PERFORMANCE
+   ======================================== */
+
+/* Message list container - use content-visibility for virtual rendering */
+#chat-messages-area {
+  contain: strict;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+  will-change: scroll-position;
+}
+
+/* Individual message items - GPU accelerated transforms */
+.group\/message {
+  will-change: transform, opacity;
+  contain: layout style paint;
+  transform: translateZ(0); /* Force GPU layer */
+}
+
+/* User list items - smooth hover transitions */
+.user-list-item,
+.ripple-container {
+  will-change: transform;
+  contain: layout style;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Sidebar scroll area */
+.scrollbar-thin {
+  contain: strict;
+  content-visibility: auto;
+}
+
+/* Animations - use GPU-friendly transforms */
+.animate-slide-up {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+.animate-fade-in {
+  will-change: opacity;
+}
+
+.animate-scale-in {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Optimize heavy animations */
+.animate-bounce,
+.animate-ping,
+.animate-spin {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Avatar hover transitions - GPU accelerated */
+.group-hover\:scale-105,
+.group-hover\:scale-110,
+.hover\:scale-105,
+.active\:scale-95 {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Reduce paint on scrolling */
+@media (prefers-reduced-motion: no-preference) {
+  .overflow-y-auto {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Disable animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
