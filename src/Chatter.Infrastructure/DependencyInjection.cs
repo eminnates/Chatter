@@ -17,16 +17,15 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // 🚀 DbContext with performance optimizations
+        // DbContext configuration
         services.AddDbContext<ChatterDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
                 b => 
                 {
                     b.MigrationsAssembly(typeof(ChatterDbContext).Assembly.FullName);
-                    // Note: SplitQuery removed - conflicts with EnableRetryOnFailure (transactions)
                     b.MaxBatchSize(100); // Batch insert/update optimizasyonu
-                    b.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null); // Retry on transient failures
+                    // Note: EnableRetryOnFailure removed - conflicts with Identity's internal transactions
                 }));
 
         // Identity Core (without UI)
