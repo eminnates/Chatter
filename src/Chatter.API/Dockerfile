@@ -18,8 +18,9 @@ COPY --from=build /app/publish .
 # Statik dosyalar için wwwroot klasörü oluştur
 RUN mkdir -p wwwroot/uploads
 
-# Render'ın PORT değişkenini dinle
-ENV ASPNETCORE_URLS=http://0.0.0.0:$PORT
+# Production environment
+ENV ASPNETCORE_ENVIRONMENT=Production
 
-# Container başlangıcı
-ENTRYPOINT ["dotnet", "Chatter.API.dll"]
+# Render'ın PORT değişkenini runtime'da kullan (build sırasında $PORT boş olur)
+# ENTRYPOINT ile shell form kullanarak runtime'da çözümlenmesini sağla
+ENTRYPOINT ["sh", "-c", "dotnet Chatter.API.dll --urls http://0.0.0.0:${PORT:-10000}"]
