@@ -62,7 +62,8 @@ corsOrigins.Add("http://localhost");
 corsOrigins.Add("ionic://localhost");
 corsOrigins.Add("http://192.168.1.1");
 
-// Add Vercel preview and production domains
+// Add Vercel production and preview domains
+corsOrigins.Add("https://chatter-seven-pied.vercel.app");
 corsOrigins.Add("https://*.vercel.app");
 
 // Production CORS uyarısı (hata fırlatmak yerine log)
@@ -78,6 +79,9 @@ builder.Services.AddCors(options =>
         policy => policy
             .SetIsOriginAllowed(origin => 
             {
+                // Log the origin for debugging
+                Console.WriteLine($"🔍 CORS request from origin: {origin}");
+                
                 if (origin.StartsWith("http://localhost") || 
                     origin.StartsWith("https://localhost") ||
                     origin.StartsWith("capacitor://") ||
@@ -89,11 +93,23 @@ builder.Services.AddCors(options =>
                     origin.Contains("ngrok") ||
                     origin.EndsWith(".ngrok-free.dev") ||
                     origin.EndsWith(".ngrok-free.app") ||
-                    origin.EndsWith(".ngrok.io"))
+                    origin.EndsWith(".ngrok.io") ||
+                    origin == "https://chatter-seven-pied.vercel.app")
                 {
+                    Console.WriteLine($"✅ CORS allowed for: {origin}");
                     return true;
                 }
-                return corsOrigins.Contains(origin);
+                
+                var isAllowed = corsOrigins.Contains(origin);
+                if (isAllowed)
+                {
+                    Console.WriteLine($"✅ CORS allowed (from config): {origin}");
+                }
+                else
+                {
+                    Console.WriteLine($"❌ CORS blocked: {origin}");
+                }
+                return isAllowed;
             })
             .AllowAnyMethod()
             .AllowCredentials()
