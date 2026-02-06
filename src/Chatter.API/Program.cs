@@ -253,6 +253,18 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 // so that CORS headers are included even in error responses (400, 500, etc.)
 app.UseCors("AllowAll");
 
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Content-Security-Policy"] = 
+        "frame-ancestors 'self' https://chatter-seven-pied.vercel.app;";
+    await next();
+});
+
 app.UseStaticFiles();
 // Add global exception handler middleware
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
