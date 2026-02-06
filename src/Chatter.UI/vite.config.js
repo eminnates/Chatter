@@ -11,11 +11,20 @@ export default defineConfig({
       protocolImports: true,
     })
   ],
-  base: './', // 👈 BU SATIRI EKLE: Electron'un dosyaları bulabilmesi için şarttır
+  base: process.env.VERCEL ? '/' : './', // Vercel'de '/', Electron'da './'
   server: {
     port: 5173,
   },
   build: {
-    outDir: 'dist', // Çıktı klasörü ismi
+    outDir: 'dist',
+    sourcemap: false, // Vercel için source map'leri devre dışı bırak (daha küçük build)
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'signalr-vendor': ['@microsoft/signalr']
+        }
+      }
+    }
   }
 })

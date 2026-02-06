@@ -35,7 +35,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure CORS - Allow web, Electron, and mobile (Capacitor)
+// Configure CORS - Allow web, Electron, mobile (Capacitor), and Vercel
 var corsOriginsEnv = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
 var corsOrigins = new List<string>();
 
@@ -56,6 +56,9 @@ corsOrigins.Add("http://localhost");
 corsOrigins.Add("ionic://localhost");
 corsOrigins.Add("http://192.168.1.1");
 
+// Add Vercel preview and production domains
+corsOrigins.Add("https://*.vercel.app");
+
 // Production CORS uyarısı (hata fırlatmak yerine log)
 if (builder.Environment.IsProduction() && corsOriginsEnv == null)
 {
@@ -74,17 +77,22 @@ builder.Services.AddCors(options =>
                     origin.StartsWith("capacitor://") ||
                     origin.StartsWith("ionic://") ||
                     origin.StartsWith("http://192.168.") ||
-                    origin.StartsWith("http://10.0."))
+                    origin.StartsWith("http://10.0.") ||
+                    origin.EndsWith(".vercel.app") ||
+                    origin.Contains("vercel.app") ||
+                    origin.Contains("ngrok") ||
+                    origin.EndsWith(".ngrok-free.dev") ||
+                    origin.EndsWith(".ngrok-free.app") ||
+                    origin.EndsWith(".ngrok.io"))
                 {
                     return true;
                 }
                 return corsOrigins.Contains(origin);
             })
             .AllowAnyMethod()
-            .AllowCredentials() // Bu olduğu için Header'ları açıkça belirtmek daha güvenlidir
-            // DEĞİŞİKLİK BURADA:
-            .WithHeaders("Authorization", "Content-Type", "ngrok-skip-browser-warning", "x-requested-with", "origin", "accept")
-            // Alternatif olarak AllowAnyHeader() kalsa bile, Authorization'ı garantiye almak için üsttekini kullanıyoruz.
+            .AllowCredentials()
+            .WithHeaders("Authorization", "Content-Type", "ngrok-skip-browser-warning", "x-requested-with", "origin", "accept", "user-agent")
+            .WithExposedHeaders("*")
     );
 });
 
