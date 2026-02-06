@@ -152,7 +152,14 @@ namespace Chatter.Application.Services
             catch (Exception ex)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                return Result<LoginResponse>.Failure(new Error("Auth.LoginFailed", "Giriş yapılırken bir hata oluştu."));
+                // Log the actual exception for debugging
+                Console.WriteLine($"❌ LOGIN EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"❌ STACK TRACE: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"❌ INNER EXCEPTION: {ex.InnerException.Message}");
+                }
+                return Result<LoginResponse>.Failure(new Error("Auth.LoginFailed", $"Giriş yapılırken bir hata oluştu: {ex.Message}"));
             }
         }
 
