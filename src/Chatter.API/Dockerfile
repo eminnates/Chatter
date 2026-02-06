@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 # Tüm .csproj dosyalarını katmanlarına göre kopyala
 COPY ["src/Chatter.API/Chatter.API.csproj", "src/Chatter.API/"]
@@ -12,7 +12,7 @@ COPY . .
 WORKDIR "/src/src/Chatter.API"
 RUN dotnet publish -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 # Statik dosyalar için wwwroot klasörü oluştur
