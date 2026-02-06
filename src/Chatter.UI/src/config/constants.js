@@ -1,7 +1,7 @@
-// 🚀 Backend URL Configuration
+// Backend URL Configuration
 // Priority: VITE_BACKEND_URL env variable > production default > localhost
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
-  (import.meta.env.MODE === 'production' 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.MODE === 'production'
     ? 'https://chatter-7q0c.onrender.com'
     : 'http://localhost:5000');
 

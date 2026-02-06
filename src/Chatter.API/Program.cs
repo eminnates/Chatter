@@ -8,9 +8,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using DotNetEnv;
 using Chatter.Domain.Entities; // <-- BUNU EKLEDİK (AppRole için şart)
-using Microsoft.EntityFrameworkCore; // 🚀 Migration için gerekli
-using System.IO.Compression; // 🚀 Response Compression için
-using Microsoft.AspNetCore.ResponseCompression; // 🚀 Response Compression için
+using Microsoft.EntityFrameworkCore;
+using System.IO.Compression;
+using Microsoft.AspNetCore.ResponseCompression;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,7 +35,7 @@ if (File.Exists(".env"))
 // Override configuration with environment variables
 builder.Configuration.AddEnvironmentVariables();
 
-// 🚀 Response Compression - API response boyutlarını ~60-70% azaltır
+// Response Compression
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -64,7 +64,7 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
-// 🚀 SignalR with optimizations
+// SignalR configuration
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 64 * 1024; // 64KB max message
@@ -223,7 +223,7 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// 🚀 AUTO-MIGRATION: Database tablolarını otomatik oluştur (Production için)
+// Auto-migration: Create database tables
 using (var scope = app.Services.CreateScope())
 {
     try
@@ -285,7 +285,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
                        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
 });
 
-// 🚀 Response Compression - CORS'tan önce olmalı
+// Response Compression - must come before CORS
 app.UseResponseCompression();
 
 // ⚠️ CORS MUST come BEFORE exception handler and other middleware

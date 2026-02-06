@@ -1,5 +1,5 @@
 /**
- * 🚀 Performance Utilities for Chatter
+ * Performance Utilities for Chatter
  * Debounce, throttle, and performance helpers
  */
 

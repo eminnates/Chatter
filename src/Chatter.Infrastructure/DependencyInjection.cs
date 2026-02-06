@@ -24,8 +24,7 @@ public static class DependencyInjection
                 b => 
                 {
                     b.MigrationsAssembly(typeof(ChatterDbContext).Assembly.FullName);
-                    b.MaxBatchSize(100); // Batch insert/update optimizasyonu
-                    // Note: EnableRetryOnFailure removed - conflicts with Identity's internal transactions
+                    b.MaxBatchSize(100);
                 }));
 
         // Identity Core (without UI)

@@ -33,7 +33,7 @@ public class ConversationRepository : GenericRepository<Conversation, Guid>, ICo
     public async Task<IEnumerable<Conversation>> GetUserConversationsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return await _dbSet
-            .AsNoTracking() // 🚀 Read-only query optimization
+            .AsNoTracking()
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
             .Include(c => c.LastMessage)
@@ -73,7 +73,7 @@ public class ConversationRepository : GenericRepository<Conversation, Guid>, ICo
     public async Task<IEnumerable<Conversation>> GetArchivedConversationsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return await _dbSet
-            .AsNoTracking() // 🚀 Read-only query optimization
+            .AsNoTracking()
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
             .Include(c => c.LastMessage)

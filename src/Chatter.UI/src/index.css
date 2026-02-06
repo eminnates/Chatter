@@ -6,16 +6,17 @@
   /* ========================================
      BASE STYLES
      ======================================== */
-  
-  html, body, #root {
+
+  html,
+  body,
+  #root {
     @apply h-full w-full overflow-hidden;
-    overscroll-behavior-y: contain; 
+    overscroll-behavior-y: contain;
   }
 
   body {
     @apply bg-bg-main text-text-main font-sans antialiased;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) 
-            env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   /* ========================================
@@ -23,25 +24,26 @@
      ======================================== */
 
   /* === DARK MODE (Default) === */
-  :root, [data-theme="dark"] {
+  :root,
+  [data-theme="dark"] {
     /* Backgrounds */
     --bg-main: #1e2230;
     --bg-sidebar: #252a3d;
     --bg-chat: #1a1f2e;
     --bg-card: #2a2f45;
     --bg-hover: #333856;
-    
+
     /* Text */
     --text-main: #e2e8f0;
     --text-muted: #94a3b8;
     --text-subtle: #64748b;
-    
+
     /* Messages */
     --msg-sent: linear-gradient(135deg, #B8D4A8 0%, #9BC285 100%);
     --msg-received: #2a2f45;
     --msg-sent-text: #1a1d2e;
     --msg-received-text: #e2e8f0;
-    
+
     /* Borders */
     --border: rgba(255, 255, 255, 0.1);
     --border-subtle: rgba(255, 255, 255, 0.05);
@@ -55,18 +57,18 @@
     --bg-chat: #faf8f5;
     --bg-card: #ffffff;
     --bg-hover: #e8e5e1;
-    
+
     /* Text */
     --text-main: #1f1d1a;
     --text-muted: #6b6560;
     --text-subtle: #9e9790;
-    
+
     /* Messages */
     --msg-sent: linear-gradient(135deg, #9BC285 0%, #7FAA6B 100%);
     --msg-received: #ebe7e1;
     --msg-sent-text: #ffffff;
     --msg-received-text: #1f1d1a;
-    
+
     /* Borders */
     --border: rgba(0, 0, 0, 0.08);
     --border-subtle: rgba(0, 0, 0, 0.04);
@@ -98,9 +100,9 @@
 
   .theme-transitioning,
   .theme-transitioning * {
-    transition: background-color 0.3s ease, 
-                color 0.3s ease, 
-                border-color 0.3s ease !important;
+    transition: background-color 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease !important;
   }
 }
 
@@ -199,8 +201,13 @@ body.is-mobile .container {
 
 /* Fade In */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .animate-fade-in {
@@ -213,6 +220,7 @@ body.is-mobile .container {
     transform: translate(-50%, -100%);
     opacity: 0;
   }
+
   to {
     transform: translate(-50%, 0);
     opacity: 1;
@@ -229,6 +237,7 @@ body.is-mobile .container {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -245,6 +254,7 @@ body.is-mobile .container {
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -261,6 +271,7 @@ body.is-mobile .container {
     transform: translateX(-10px);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -273,8 +284,13 @@ body.is-mobile .container {
 
 /* Shimmer */
 @keyframes shimmer {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .animate-shimmer {
@@ -283,8 +299,13 @@ body.is-mobile .container {
 
 /* Spin */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {
@@ -297,6 +318,7 @@ body.is-mobile .container {
     transform: scale(0);
     opacity: 1;
   }
+
   to {
     transform: scale(4);
     opacity: 0;
@@ -309,8 +331,15 @@ body.is-mobile .container {
 
 /* Bounce Soft */
 @keyframes bounceSoft {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
 }
 
 .animate-bounce-soft {
@@ -319,8 +348,15 @@ body.is-mobile .container {
 
 /* Pulse Glow */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-  50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
+  }
 }
 
 .online-badge {
@@ -329,8 +365,15 @@ body.is-mobile .container {
 
 /* Error Pulse */
 @keyframes errorPulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .image-error-icon {
@@ -339,17 +382,20 @@ body.is-mobile .container {
 
 /* Skeleton Loading */
 @keyframes skeletonLoading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-card) 0%,
-    var(--bg-hover) 50%,
-    var(--bg-card) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--bg-card) 0%,
+      var(--bg-hover) 50%,
+      var(--bg-card) 100%);
   background-size: 200% 100%;
   animation: skeletonLoading 1.5s ease-in-out infinite;
 }
@@ -427,7 +473,7 @@ body.is-mobile .container {
   .lightbox-header {
     padding-top: calc(1rem + env(safe-area-inset-top));
   }
-  
+
   .lightbox-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
@@ -437,7 +483,7 @@ body.is-mobile .container {
   .lightbox-controls {
     padding: 0.75rem;
   }
-  
+
   .lightbox-controls button {
     padding: 0.625rem;
   }
@@ -509,7 +555,7 @@ body.is-mobile .container {
 }
 
 /* ========================================
-   🚀 GPU ACCELERATION & PERFORMANCE
+   GPU ACCELERATION & PERFORMANCE
    ======================================== */
 
 /* Message list container - use content-visibility for virtual rendering */
@@ -524,7 +570,8 @@ body.is-mobile .container {
 .group\/message {
   will-change: transform, opacity;
   contain: layout style paint;
-  transform: translateZ(0); /* Force GPU layer */
+  transform: translateZ(0);
+  /* Force GPU layer */
 }
 
 /* User list items - smooth hover transitions */
@@ -583,6 +630,7 @@ body.is-mobile .container {
 
 /* Disable animations for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

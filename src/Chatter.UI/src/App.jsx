@@ -641,7 +641,7 @@ function App() {
           )}
         </div>
 
-        {/* 🚀 Call components wrapped with Suspense for lazy loading */}
+        {/* Call components with Suspense for lazy loading */}
         <Suspense fallback={null}>
           {callStatus === 'ringing' && activeCall?.initiatorId !== getSafeUserId(user) && (
             <IncomingCallModal call={activeCall} onAccept={acceptCall} onDecline={declineCall} />

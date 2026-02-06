@@ -485,5 +485,4 @@ const ChatWindow = ({
   );
 };
 
-// 🚀 Memoized ChatWindow for performance - prevents re-renders when parent state changes
 export default memo(ChatWindow);
