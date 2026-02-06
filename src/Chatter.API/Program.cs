@@ -12,6 +12,12 @@ using Microsoft.EntityFrameworkCore; // 🚀 Migration için gerekli
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow all hosts (required for Render and other cloud platforms)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.AllowSynchronousIO = true;
+});
+
 // Add detailed logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -211,13 +217,21 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    // Development'ta HTTPS yönlendirmesini devre dışı bırak
-    // app.UseHttpsRedirection();
 }
 else
 {
+    // Production: Allow Swagger and use HTTPS
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.UseHttpsRedirection();
 }
+
+// Configure forwarded headers for reverse proxy (Render, etc.)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+                       Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+});
 
 app.UseStaticFiles();
 // Add global exception handler middleware
