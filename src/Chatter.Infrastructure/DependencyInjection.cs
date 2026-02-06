@@ -17,11 +17,17 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // DbContext
+        // 🚀 DbContext with performance optimizations
         services.AddDbContext<ChatterDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
-                b => b.MigrationsAssembly(typeof(ChatterDbContext).Assembly.FullName)));
+                b => 
+                {
+                    b.MigrationsAssembly(typeof(ChatterDbContext).Assembly.FullName);
+                    b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); // N+1 sorgu problemini azaltır
+                    b.MaxBatchSize(100); // Batch insert/update optimizasyonu
+                    b.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null); // Retry on transient failures
+                }));
 
         // Identity Core (without UI)
         services.AddIdentityCore<AppUser>(options =>

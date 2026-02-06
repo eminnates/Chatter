@@ -19,6 +19,8 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
         CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking() // 🚀 Read-only query optimization
+            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
             .Include(m => m.Attachments)
@@ -115,6 +117,8 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
     public async Task<Message?> GetByIdWithDetailsAsync(Guid messageId, CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking() // 🚀 Read-only query optimization
+            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(m => m.Sender)
             .Include(m => m.Attachments)
             .Include(m => m.Reactions)

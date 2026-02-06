@@ -9,6 +9,8 @@ using System.Text;
 using DotNetEnv;
 using Chatter.Domain.Entities; // <-- BUNU EKLEDİK (AppRole için şart)
 using Microsoft.EntityFrameworkCore; // 🚀 Migration için gerekli
+using System.IO.Compression; // 🚀 Response Compression için
+using Microsoft.AspNetCore.ResponseCompression; // 🚀 Response Compression için
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,11 +34,45 @@ if (File.Exists(".env"))
 
 // Override configuration with environment variables
 builder.Configuration.AddEnvironmentVariables();
+
+// 🚀 Response Compression - API response boyutlarını ~60-70% azaltır
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[] 
+    { 
+        "application/json",
+        "text/plain",
+        "text/html"
+    });
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
 // Servisi ekle
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
-builder.Services.AddSignalR();
+
+// 🚀 SignalR with optimizations
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 64 * 1024; // 64KB max message
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
+
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -248,6 +284,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
                        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
 });
+
+// 🚀 Response Compression - CORS'tan önce olmalı
+app.UseResponseCompression();
 
 // ⚠️ CORS MUST come BEFORE exception handler and other middleware
 // so that CORS headers are included even in error responses (400, 500, etc.)
