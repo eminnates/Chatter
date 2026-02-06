@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using DotNetEnv;
 using Chatter.Domain.Entities; // <-- BUNU EKLEDİK (AppRole için şart)
+using Microsoft.EntityFrameworkCore; // 🚀 Migration için gerekli
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,9 +56,11 @@ corsOrigins.Add("http://localhost");
 corsOrigins.Add("ionic://localhost");
 corsOrigins.Add("http://192.168.1.1");
 
+// Production CORS uyarısı (hata fırlatmak yerine log)
 if (builder.Environment.IsProduction() && corsOriginsEnv == null)
 {
-    throw new InvalidOperationException("CORS_ALLOWED_ORIGINS must be configured for production environment!");
+    Console.WriteLine("⚠️  WARNING: CORS_ALLOWED_ORIGINS not configured. Using default origins.");
+    Console.WriteLine("   Set CORS_ALLOWED_ORIGINS environment variable for production!");
 }
 
 builder.Services.AddCors(options =>
@@ -153,6 +156,29 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+
+// 🚀 AUTO-MIGRATION: Database tablolarını otomatik oluştur (Production için)
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<Chatter.Infrastructure.Data.ChatterDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        logger.LogInformation("🔄 Checking database migrations...");
+        
+        // Migration'ları uygula
+        await dbContext.Database.MigrateAsync();
+        
+        logger.LogInformation("✅ Database migrations completed successfully!");
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "❌ An error occurred while migrating the database.");
+        throw; // Production'da hata fırlatıp container'ı restart yapsın
+    }
+}
 
 // --- SEED ROLES (DÜZELTİLEN KISIM) ---
 using (var scope = app.Services.CreateScope())
