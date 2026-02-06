@@ -63,7 +63,7 @@ corsOrigins.Add("ionic://localhost");
 corsOrigins.Add("http://192.168.1.1");
 
 // Add Vercel production and preview domains
-corsOrigins.Add("https://chatter-seven-pied.vercel.app/");
+corsOrigins.Add("https://chatter-seven-pied.vercel.app");
 corsOrigins.Add("https://*.vercel.app");
 
 // Production CORS uyarısı (hata fırlatmak yerine log)
@@ -94,7 +94,7 @@ builder.Services.AddCors(options =>
                     origin.EndsWith(".ngrok-free.dev") ||
                     origin.EndsWith(".ngrok-free.app") ||
                     origin.EndsWith(".ngrok.io") ||
-                    origin == "https://chatter-seven-pied.vercel.app/")
+                    origin == "https://chatter-seven-pied.vercel.app")
                 {
                     Console.WriteLine($"✅ CORS allowed for: {origin}");
                     return true;
