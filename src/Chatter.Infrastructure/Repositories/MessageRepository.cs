@@ -20,7 +20,6 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
     {
         return await _dbSet
             .AsNoTracking() // 🚀 Read-only query optimization
-            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
             .Include(m => m.Attachments)
@@ -118,7 +117,6 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
     {
         return await _dbSet
             .AsNoTracking() // 🚀 Read-only query optimization
-            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(m => m.Sender)
             .Include(m => m.Attachments)
             .Include(m => m.Reactions)

@@ -24,7 +24,7 @@ public static class DependencyInjection
                 b => 
                 {
                     b.MigrationsAssembly(typeof(ChatterDbContext).Assembly.FullName);
-                    b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); // N+1 sorgu problemini azaltır
+                    // Note: SplitQuery removed - conflicts with EnableRetryOnFailure (transactions)
                     b.MaxBatchSize(100); // Batch insert/update optimizasyonu
                     b.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null); // Retry on transient failures
                 }));

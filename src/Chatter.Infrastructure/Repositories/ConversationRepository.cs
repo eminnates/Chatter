@@ -34,7 +34,6 @@ public class ConversationRepository : GenericRepository<Conversation, Guid>, ICo
     {
         return await _dbSet
             .AsNoTracking() // 🚀 Read-only query optimization
-            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
             .Include(c => c.LastMessage)
@@ -75,7 +74,6 @@ public class ConversationRepository : GenericRepository<Conversation, Guid>, ICo
     {
         return await _dbSet
             .AsNoTracking() // 🚀 Read-only query optimization
-            .AsSplitQuery()  // 🚀 Split query for better performance
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
             .Include(c => c.LastMessage)
