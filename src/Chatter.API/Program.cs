@@ -249,6 +249,10 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
                        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
 });
 
+// ⚠️ CORS MUST come BEFORE exception handler and other middleware
+// so that CORS headers are included even in error responses (400, 500, etc.)
+app.UseCors("AllowAll");
+
 app.UseStaticFiles();
 // Add global exception handler middleware
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
@@ -256,7 +260,6 @@ app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 // Add request logging middleware
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
