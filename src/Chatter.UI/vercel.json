@@ -17,16 +17,8 @@
           "value": "nosniff"
         },
         {
-          "key": "X-Frame-Options",
-          "value": "SAMEORIGIN"
-        },
-        {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
-        },
-        {
-          "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://chatter-seven-pied.vercel.app https://chatter-7q0c.onrender.com;"
         },
         {
           "key": "Referrer-Policy",
