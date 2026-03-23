@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { memo, useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply, Copy, Loader2, AlertCircle, Smile, Pencil } from 'lucide-react';
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
@@ -11,6 +12,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const [isLongPressing, setIsLongPressing] = useState(false);
   const longPressTimer = useRef(null);
   const emojiPickerRef = useRef(null);
   const editInputRef = useRef(null);
@@ -69,8 +71,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   // --- MOBILE LONG PRESS ---
   const handleTouchStart = () => {
     if (!isMobile) return;
+    setIsLongPressing(true);
     longPressTimer.current = setTimeout(() => {
       setShowMobileActions(true);
+      setIsLongPressing(false);
       // Haptic feedback if available
       if (window.navigator?.vibrate) {
         window.navigator.vibrate(50);
@@ -82,6 +86,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+      setIsLongPressing(false);
     }
   };
 
@@ -90,6 +95,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    setIsLongPressing(false);
   };
 
   // Close mobile actions on outside click
@@ -297,6 +303,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
             className={`absolute z-50 ${isSentByMe ? 'right-0' : 'left-0'} bottom-full mb-2`}
             onClick={(e) => e.stopPropagation()}
           >
+            <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
             <EmojiPicker
               onEmojiClick={handleEmojiSelect}
               width={isMobile ? Math.min(300, window.innerWidth - 40) : 300}
@@ -307,12 +314,14 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
               theme="dark"
               lazyLoadEmojis
             />
+            </Suspense>
           </div>
         )}
 
         {/* --- MESSAGE BUBBLE --- */}
         <div className={`
           relative w-full px-4 py-2.5 shadow-soft text-sm break-words transition-all hover:shadow-soft-lg
+          ${isLongPressing ? 'scale-[0.97] opacity-80' : ''}
           ${isSentByMe
             ? 'bg-gradient-to-br from-accent-primary to-accent-secondary text-white rounded-2xl rounded-tr-md'
             : 'bg-bg-card border border-border-subtle text-text-main rounded-2xl rounded-tl-md'
@@ -469,9 +478,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
               </div>
             </div>
           ) : msg.content ? (
-            <p className="leading-relaxed whitespace-pre-wrap text-[15px] select-text">
-              {msg.content}
-            </p>
+            <p 
+              className="leading-relaxed whitespace-pre-wrap text-[15px] select-text"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content.replace(/\n/g, '<br />')) }}
+            />
           ) : null}
 
           {/* --- EDITED LABEL --- */}
@@ -536,6 +546,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                   }
                 `}
                 title={`${userIds.length} reaction${userIds.length > 1 ? 's' : ''}`}
+                aria-label={`${emoji} reaction, ${userIds.length} ${userIds.length > 1 ? 'people' : 'person'}${iReacted ? ', you reacted' : ''}`}
               >
                 <span className="text-sm">{emoji}</span>
                 {userIds.length > 1 && <span className="text-[10px] font-medium">{userIds.length}</span>}
@@ -552,7 +563,11 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
         </span>
 
         {isSentByMe && !hasError && !isSending && (
-          <span className={`flex items-center transition-colors ${msg.isRead ? 'text-blue-400' : 'text-text-muted/60'}`}>
+          <span
+            className={`flex items-center transition-colors ${msg.isRead ? 'text-blue-400' : 'text-text-muted/60'}`}
+            aria-label={msg.isRead ? 'Read' : 'Sent'}
+            role="img"
+          >
             {msg.isRead ? (
               <CheckCheck size={14} className="drop-shadow-sm" />
             ) : (

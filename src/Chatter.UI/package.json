@@ -12,70 +12,19 @@
     "type": "git",
     "url": "https://github.com/eminnates/Chatter.git"
   },
-  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "electron:build": "npm run build && electron-builder --win --linux",
-    "electron:publish": "npm run build && electron-builder --win --linux --publish always",
-    "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
     "android:build": "npm run android:sync && cd android && ./gradlew assembleRelease",
     "android:build:debug": "npm run android:sync && cd android && ./gradlew assembleDebug"
   },
-  "build": {
-    "appId": "com.chatter.app",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "eminnates",
-        "repo": "Chatter"
-      }
-    ],
-    "productName": "Chatter",
-    "artifactName": "${productName}-Setup-${version}.${ext}",
-    "directories": {
-      "output": "dist_electron"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/main.js",
-      "electron/preload.js"
-    ],
-    "icon": "build/icon.png",
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.png"
-    },
-    "linux": {
-      "icon": "build/icons",
-      "target": [
-        "AppImage",
-        "pacman",
-        "deb"
-      ],
-      "executableName": "chatter",
-      "desktop": {
-        "Icon": "chatter"
-      },
-      "maintainer": "Emin Ates <mhmtmn1800@gmail.com>",
-      "category": "Chat"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Chatter"
-    }
-  },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
     "@capacitor/browser": "^8.0.0",
@@ -93,32 +42,35 @@
     "@capacitor/status-bar": "^8.0.0",
     "@hugotomazi/capacitor-navigation-bar": "^4.0.1",
     "@microsoft/signalr": "^8.0.17",
+    "@microsoft/signalr-protocol-msgpack": "^10.0.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-os": "^2.3.2",
     "axios": "^1.13.2",
-    "electron-log": "^5.4.3",
-    "electron-updater": "^6.7.3",
+    "dompurify": "^3.3.3",
     "emoji-picker-react": "^4.18.0",
     "firebase": "^12.7.0",
     "lucide-react": "^0.562.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.11.0",
+    "react-virtuoso": "^4.18.3",
     "react-window": "^2.2.6",
     "semver": "^7.7.3",
     "simple-peer": "^9.11.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "@types/dompurify": "^3.0.5",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.23",
-    "concurrently": "^8.0.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "vite": "^5.0.0",
-    "vite-plugin-node-polyfills": "^0.24.0",
-    "wait-on": "^7.0.0"
+    "vite-plugin-node-polyfills": "^0.24.0"
   },
   "overrides": {
     "@hugotomazi/capacitor-navigation-bar": {

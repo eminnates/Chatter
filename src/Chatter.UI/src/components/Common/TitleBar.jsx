@@ -1,42 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { Minus, Square, X, MessageCircle, Maximize2 } from 'lucide-react';
+import { Window } from '@tauri-apps/api/window';
+import { isTauri } from '@tauri-apps/api/core';
 
 const TitleBar = ({ appName = "Chatter" }) => {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [isElectron, setIsElectron] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
-    // Electron kontrolü
-    const electron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-    setIsElectron(electron);
-
-    // Maximize durumunu dinle
-    if (electron && window.electronAPI?.onMaximizeChange) {
-      window.electronAPI.onMaximizeChange((maximized) => {
-        setIsMaximized(maximized);
-      });
-    }
+    // Desktop environment check
+    const checkDesktop = async () => {
+      if (isTauri()) {
+        setIsDesktop(true);
+        const appWindow = Window.getCurrent();
+        
+        // Listen to resize events
+        appWindow.onResized(async () => {
+          const maximized = await appWindow.isMaximized();
+          setIsMaximized(maximized);
+        });
+      }
+    };
+    
+    checkDesktop();
   }, []);
 
-  // Eğer Electron değilse, TitleBar'ı gösterme
-  if (!isElectron) return null;
+  // Show TitleBar only on desktop via Tauri
+  if (!isDesktop) return null;
 
   const handleMinimize = () => {
-    if (window.electronAPI?.minimize) {
-      window.electronAPI.minimize();
-    }
+     Window.getCurrent()?.minimize();
   };
 
-  const handleMaximize = () => {
-    if (window.electronAPI?.maximize) {
-      window.electronAPI.maximize();
+  const handleMaximize = async () => {
+    const appWindow = Window.getCurrent();
+    if (appWindow) {
+        await appWindow.toggleMaximize();
     }
   };
 
   const handleClose = () => {
-    if (window.electronAPI?.close) {
-      window.electronAPI.close();
-    }
+     Window.getCurrent()?.close();
   };
 
   return (

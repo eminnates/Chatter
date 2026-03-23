@@ -179,7 +179,7 @@
   -webkit-app-region: no-drag;
 }
 
-body.is-electron #root {
+body.is-tauri #root {
   padding-top: 32px;
 }
 

@@ -26,7 +26,10 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'signalr-vendor': ['@microsoft/signalr'],
           'capacitor-vendor': ['@capacitor/core', '@capacitor/app', '@capacitor/keyboard', '@capacitor/haptics'],
-          'icons-vendor': ['lucide-react']
+          'icons-vendor': ['lucide-react'],
+          'emoji-vendor': ['emoji-picker-react'],
+          'webrtc-vendor': ['simple-peer'],
+          'tauri-vendor': ['@tauri-apps/api']
         }
       }
     }

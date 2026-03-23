@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, memo, useCallback } from 'react';
 import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search } from 'lucide-react';
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
+import { Virtuoso } from 'react-virtuoso';
 
 const ChatWindow = ({
   selectedUser,
@@ -411,20 +412,26 @@ const ChatWindow = ({
           </div>
         ) : (
           /* Messages List */
-          displayMessages.map((msg, i) => (
-            <MessageItem
-              key={msg.id || `temp-${i}`}
-              msg={msg}
-              currentUserId={currentUserId}
-              onImageClick={onImageClick}
-              onReply={setReplyingTo}
-              onEdit={onEditMessage}
-              onAddReaction={onAddReaction}
-              onRemoveReaction={onRemoveReaction}
-              onRetry={onRetryMessage}
-              isMobile={isMobile}
-            />
-          ))
+          <Virtuoso
+            style={{ height: '100%', width: '100%' }}
+            data={displayMessages}
+            initialTopMostItemIndex={displayMessages.length - 1}
+            itemContent={(index, msg) => (
+              <MessageItem
+                key={msg.id || `temp-${index}`}
+                msg={msg}
+                currentUserId={currentUserId}
+                onImageClick={onImageClick}
+                onReply={setReplyingTo}
+                onEdit={onEditMessage}
+                onAddReaction={onAddReaction}
+                onRemoveReaction={onRemoveReaction}
+                onRetry={onRetryMessage}
+                isMobile={isMobile}
+              />
+            )}
+            followOutput="auto"
+          />
         )}
 
         {/* Typing Indicator */}

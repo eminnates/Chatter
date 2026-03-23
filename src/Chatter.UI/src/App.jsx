@@ -1,6 +1,8 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
-import * as signalR from '@microsoft/signalr'
-import axios from 'axios'
+import * as signalR from '@microsoft/signalr';
+import { MessagePackHubProtocol } from '@microsoft/signalr-protocol-msgpack';
+import axios from 'axios';
 import './index.css'
 
 // --- CONFIG & UTILS ---
@@ -130,13 +132,13 @@ function App() {
   }, [])
 
   // === LOGOUT ===
-  const logout = async () => {
+  const logout = useCallback(async () => {
     if (connection) try { await connection.stop(); } catch { }
     await storage.remove('token');
     await storage.remove('user');
     setToken(null);
     setUser(null);
-  }
+  }, [connection]);
 
   // === SOUND ===
   const playSound = useCallback((soundName) => {
@@ -334,7 +336,7 @@ function App() {
           setTimeout(() => { checkAndroidUpdate(showToast); }, 3000);
         }
       }
-      if (window.electronAPI?.isElectron) document.body.classList.add('is-electron');
+      if (isTauri()) document.body.classList.add('is-desktop');
 
       // Network durumu algılama (tüm platformlar)
       Network.addListener('networkStatusChange', (status) => {
@@ -415,6 +417,7 @@ function App() {
         skipNegotiation: true,
         transport: signalR.HttpTransportType.WebSockets
       })
+      .withHubProtocol(new MessagePackHubProtocol())
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Information)
       .build();
@@ -717,7 +720,7 @@ function App() {
   }, [token, selectedUser]);
 
   // === SEND MESSAGE FUNCTION (OPTIMIZED FOR REPLY) ===
-  const sendMessage = async (e) => {
+  const sendMessage = useCallback(async (e) => {
     e.preventDefault();
     if ((!messageInput.trim() && !selectedFile) || !selectedUser || !connection) return;
 
@@ -812,7 +815,7 @@ function App() {
       showToast('Send failed — will retry when connected', 'error');
       console.error(e);
     }
-  };
+  }, [messageInput, selectedFile, selectedUser, connection, user, replyingTo, token, users, playSound, showToast]);
 
   const handleAuthSuccess = (responseData) => {
     const receivedToken = responseData.token || responseData.data?.token || responseData.accessToken;
@@ -834,12 +837,12 @@ function App() {
 
   if (!token) return <ErrorBoundary><AuthScreen onAuthSuccess={handleAuthSuccess} /></ErrorBoundary>
 
-  const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+  const isDesktopApp = window.__TAURI__ !== undefined;
 
   return (
     <ErrorBoundary>
       <TitleBar />
-      <div className={`flex w-screen bg-bg-main overflow-hidden ${isElectron ? 'h-[calc(100vh-32px)]' : 'h-full'}`}>
+      <div className={`flex w-screen bg-bg-main overflow-hidden ${isDesktopApp ? 'h-[calc(100vh-32px)]' : 'h-full'}`}>
         <Toast toast={toast} />
 
         {isMobile && (

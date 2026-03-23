@@ -187,11 +187,13 @@ const ActiveCallScreen = ({
             
             {/* Local Video (Picture-in-Picture) */}
             <div className={`
-              absolute top-6 right-6 w-48 h-36 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20
+              absolute w-48 h-36 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20
               transition-all duration-300
               ${showControls ? 'opacity-100' : 'opacity-50'}
               ${isVideoOff ? 'hidden' : 'block'}
-            `}>
+            `}
+            style={{ top: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))', right: 'max(1.5rem, env(safe-area-inset-right, 1.5rem))' }}
+            >
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -203,7 +205,9 @@ const ActiveCallScreen = ({
 
             {/* Video off overlay for local */}
             {isVideoOff && (
-              <div className="absolute top-6 right-6 w-48 h-36 rounded-2xl bg-bg-card border-2 border-white/20 flex items-center justify-center">
+              <div className="absolute w-48 h-36 rounded-2xl bg-bg-card border-2 border-white/20 flex items-center justify-center"
+              style={{ top: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))', right: 'max(1.5rem, env(safe-area-inset-right, 1.5rem))' }}
+              >
                 <div className="text-center">
                   <VideoOff size={32} className="text-white/60 mx-auto mb-2" />
                   <p className="text-xs text-white/60">Camera off</p>

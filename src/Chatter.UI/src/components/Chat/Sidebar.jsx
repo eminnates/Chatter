@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { Sun, Moon, Volume2, VolumeX, User, LogOut, Search, X } from 'lucide-react';
 import UserListItem from './UserListItem';
 import Ripple from '../Common/Ripple';
@@ -21,31 +21,28 @@ const Sidebar = memo(({
 }) => {
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredUsers, setFilteredUsers] = useState([]);
 
   // ============================================
-  // SEARCH FUNCTIONALITY
+  // SEARCH FUNCTIONALITY WITH useMemo
   // ============================================
-  useEffect(() => {
+  const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) {
-      setFilteredUsers(users);
-      return;
+      return users;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = users.filter(u => 
+    return users.filter(u => 
       u.id !== user?.id && (
         (u.fullName?.toLowerCase().includes(query)) ||
         (u.userName?.toLowerCase().includes(query)) ||
         (u.lastMessage?.toLowerCase().includes(query))
       )
     );
-    setFilteredUsers(filtered);
   }, [searchQuery, users, user?.id]);
 
   // Separate online/offline users
-  const onlineUsers = filteredUsers.filter(u => u.id !== user?.id && u.isOnline);
-  const offlineUsers = filteredUsers.filter(u => u.id !== user?.id && !u.isOnline);
+  const onlineUsers = useMemo(() => filteredUsers.filter(u => u.id !== user?.id && u.isOnline).sort((a, b) => (b.unreadCount || 0) - (a.unreadCount || 0)), [filteredUsers, user?.id]);
+  const offlineUsers = useMemo(() => filteredUsers.filter(u => u.id !== user?.id && !u.isOnline).sort((a, b) => (b.unreadCount || 0) - (a.unreadCount || 0)), [filteredUsers, user?.id]);
 
   return (
     <div 
@@ -311,9 +308,7 @@ const Sidebar = memo(({
                   <div className="flex-1 h-px bg-border-subtle" />
                 </div>
                 
-                {onlineUsers
-                  .sort((a, b) => (b.unreadCount || 0) - (a.unreadCount || 0))
-                  .map(u => (
+                {onlineUsers.map(u => (
                     <UserListItem
                       key={u.id}
                       user={u}
@@ -338,9 +333,7 @@ const Sidebar = memo(({
                   <div className="flex-1 h-px bg-border-subtle" />
                 </div>
                 
-                {offlineUsers
-                  .sort((a, b) => (b.unreadCount || 0) - (a.unreadCount || 0))
-                  .map(u => (
+                {offlineUsers.map(u => (
                     <UserListItem
                       key={u.id}
                       user={u}

@@ -8,13 +8,14 @@ const SecureImage = memo(({ src, alt, className, onClick }) => {
 
   useEffect(() => {
     if (!src) return;
-    
+
     let isMounted = true;
+    let objectUrl = null;
     setLoading(true);
     setError(false);
 
-    fetch(src, { 
-      headers: { 'ngrok-skip-browser-warning': 'true' } 
+    fetch(src, {
+      headers: { 'ngrok-skip-browser-warning': 'true' }
     })
       .then(response => {
         if (!response.ok) throw new Error('Failed to load image');
@@ -22,7 +23,7 @@ const SecureImage = memo(({ src, alt, className, onClick }) => {
       })
       .then(blob => {
         if (isMounted) {
-          const objectUrl = URL.createObjectURL(blob);
+          objectUrl = URL.createObjectURL(blob);
           setImageSrc(objectUrl);
           setLoading(false);
         }
@@ -37,7 +38,7 @@ const SecureImage = memo(({ src, alt, className, onClick }) => {
 
     return () => {
       isMounted = false;
-      if (imageSrc) URL.revokeObjectURL(imageSrc);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [src]);
 

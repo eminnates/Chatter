@@ -55,7 +55,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
       `}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onClick())}
       aria-label={`Chat with ${user.fullName || user.userName}`}
     >
       {/* Ripple Effect */}

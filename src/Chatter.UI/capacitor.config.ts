@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize, KeyboardStyle } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
   appId: 'com.chatter.app',
@@ -15,26 +16,26 @@ const config: CapacitorConfig = {
     // 🎨 2. Arka plan ayarları
     backgroundColor: '#0a0e27', 
     allowMixedContent: true,
-    minWebViewVersion: 50
+    minWebViewVersion: 100
   },
 
   plugins: {
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#0a0e27', 
-      overlaysWebView: true 
+      overlaysWebView: false
     },
     
     Keyboard: {
-      resize: 'native', 
+      resize: KeyboardResize.Native,
       resizeOnFullScreen: true,
-      style: 'DARK' 
+      style: KeyboardStyle.Dark
     },
 
     // 🚀 3. Splash Screen Ayarları
     SplashScreen: {
       launchShowDuration: 2000,
-      launchAutoHide: false, 
+      launchAutoHide: true,
       backgroundColor: "#0a0e27", 
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
