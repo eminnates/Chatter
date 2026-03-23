@@ -38,7 +38,7 @@ const Toast = ({ toast }) => {
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] animate-slide-down">
-      <div className={`${currentStyle.bg} ${currentStyle.text} rounded-2xl shadow-soft-lg px-4 py-3 flex items-center gap-3 max-w-md min-w-[280px] backdrop-blur-sm`}>
+      <div className={`${currentStyle.bg} ${currentStyle.text} rounded-2xl shadow-soft-lg px-4 py-3 flex items-center gap-3 max-w-md min-w-[280px]`}>
         {/* Icon */}
         <div className={`${currentStyle.iconBg} rounded-full p-2 flex items-center justify-center flex-shrink-0`}>
           {currentStyle.icon}

@@ -165,7 +165,7 @@ export default function ProfilePage({
 
   return (
     // Overlay: Mobilde tam ekran, Masaüstünde karartılmış arka plan
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 animate-[fadeIn_0.2s_ease-out]">
       
       {/* Modal Container */}
       <div className="w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md bg-bg-card md:rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-300">

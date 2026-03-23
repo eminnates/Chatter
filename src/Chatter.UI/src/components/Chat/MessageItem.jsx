@@ -197,7 +197,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     return (
       <div className="flex flex-col items-center my-6 animate-fade-in">
         <div className={`
-          flex items-center gap-2.5 px-5 py-2 rounded-full text-xs font-medium shadow-soft backdrop-blur-sm transition-all hover:scale-105
+          flex items-center gap-2.5 px-5 py-2 rounded-full text-xs font-medium shadow-soft transition-all hover:scale-105
           ${isNegative
             ? 'bg-red-500/10 border border-red-500/20 text-red-400'
             : isSuccess
@@ -518,7 +518,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
             {msg.content && (
               <button
                 onClick={handleCopy}
-                className="p-1.5 rounded-lg bg-bg-card/95 backdrop-blur-sm border border-border-subtle hover:bg-accent-light hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
+                className="p-1.5 rounded-lg bg-bg-card border border-border-subtle hover:bg-accent-light hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
                 title={copied ? "Copied!" : "Copy"}
                 aria-label="Copy message"
               >

@@ -97,7 +97,7 @@ const AuthScreen = ({ onAuthSuccess }) => {
       <Toast toast={toast} />
 
       {/* --- LOGIN KUTUSU --- */}
-      <div className="relative z-10 w-full max-w-md p-8 sm:p-10 bg-bg-sidebar/60 backdrop-blur-2xl border border-white/5 rounded-3xl shadow-2xl animate-slide-up">
+      <div className="relative z-10 w-full max-w-md p-8 sm:p-10 bg-bg-sidebar border border-white/5 rounded-3xl shadow-2xl animate-slide-up">
         
         {/* LOGO */}
         <div className="flex justify-center mb-8">

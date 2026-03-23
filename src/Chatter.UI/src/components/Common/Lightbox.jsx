@@ -32,7 +32,7 @@ const Lightbox = ({ image, onClose }) => {
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4 animate-fade-in"
       onClick={onClose}
     >
       {/* Header Controls */}
@@ -48,7 +48,7 @@ const Lightbox = ({ image, onClose }) => {
               e.stopPropagation();
               handleDownload();
             }}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors backdrop-blur-sm"
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
             title="Download"
           >
             <Download size={20} />
@@ -57,7 +57,7 @@ const Lightbox = ({ image, onClose }) => {
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-white/10 hover:bg-red-500/80 text-white transition-colors backdrop-blur-sm"
+            className="p-2 rounded-lg bg-white/10 hover:bg-red-500/80 text-white transition-colors"
             title="Close (ESC)"
           >
             <X size={20} />

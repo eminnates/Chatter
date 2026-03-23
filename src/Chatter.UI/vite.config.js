@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     nodePolyfills({
-      // Whether to polyfill `node:` protocol imports.
-      protocolImports: true,
+      include: ['buffer', 'process'],
+      globals: { Buffer: true, process: true },
     })
   ],
   base: process.env.VERCEL ? '/' : './', // Vercel'de '/', Electron'da './'

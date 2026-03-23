@@ -18,7 +18,7 @@ const OutgoingCallScreen = ({ call, users, onEndCall, currentUserId }) => {
   }, [onEndCall]);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-bg-main via-bg-sidebar to-bg-chat backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+    <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-bg-main via-bg-sidebar to-bg-chat flex items-center justify-center p-6 animate-fade-in">
       <div className="w-full max-w-md animate-scale-in">
         
         {/* Avatar with pulse rings */}

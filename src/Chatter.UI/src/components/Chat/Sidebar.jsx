@@ -58,7 +58,7 @@ const Sidebar = memo(({
       {/* ============================================ */}
       {/* HEADER */}
       {/* ============================================ */}
-      <div className="flex flex-col gap-4 p-5 border-b border-border bg-gradient-to-b from-bg-main/30 to-transparent backdrop-blur-sm">
+      <div className="flex flex-col gap-4 p-5 border-b border-border bg-gradient-to-b from-bg-main to-transparent">
         
         {/* App Title */}
         <div className="flex items-center justify-between">
@@ -95,9 +95,7 @@ const Sidebar = memo(({
               
               {/* Status Indicator */}
               {connectionStatus === 'connected' && (
-                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-bg-sidebar rounded-full">
-                  <span className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75"></span>
-                </span>
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-bg-sidebar rounded-full" />
               )}
             </div>
             
@@ -110,10 +108,7 @@ const Sidebar = memo(({
               {/* Connection Status */}
               {connectionStatus === 'connected' ? (
                 <span className="flex items-center gap-1.5 text-xs text-green-500 font-medium">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
+                  <span className="inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                   Connected
                 </span>
               ) : connectionStatus === 'connecting' ? (

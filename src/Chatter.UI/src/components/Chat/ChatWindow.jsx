@@ -199,7 +199,7 @@ const ChatWindow = ({
   if (!selectedUser && !showProfilePage) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-bg-chat via-bg-main to-bg-chat text-center p-6 animate-fade-in">
-        <div className="relative p-12 rounded-3xl bg-bg-card/50 border border-border backdrop-blur-xl shadow-2xl max-w-md w-full animate-scale-in">
+        <div className="relative p-12 rounded-3xl bg-bg-card border border-border shadow-2xl max-w-md w-full animate-scale-in">
           <div className="absolute -top-10 -left-10 w-32 h-32 bg-accent-primary/10 rounded-full blur-3xl"></div>
           <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-accent-warm/10 rounded-full blur-3xl"></div>
 
@@ -227,7 +227,7 @@ const ChatWindow = ({
       {/* ============================================ */}
       {/* HEADER */}
       {/* ============================================ */}
-      <div className="flex items-center justify-between px-4 py-3 bg-bg-sidebar/90 backdrop-blur-xl border-b border-border shadow-soft z-20">
+      <div className="flex items-center justify-between px-4 py-3 bg-bg-sidebar border-b border-border shadow-soft z-20">
 
         {/* Left: Menu + User Info */}
         <div className="flex items-center gap-3 overflow-hidden flex-1">
@@ -269,10 +269,7 @@ const ChatWindow = ({
                 </span>
               ) : selectedUser.isOnline ? (
                 <span className="flex items-center gap-1.5 text-xs text-green-500 font-medium">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
+                  <span className="inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                   Online
                 </span>
               ) : (
@@ -329,7 +326,7 @@ const ChatWindow = ({
       {/* SEARCH BAR */}
       {/* ============================================ */}
       {showSearch && (
-        <div className="px-4 py-2 bg-bg-sidebar/80 backdrop-blur-sm border-b border-border flex items-center gap-2 animate-slide-up">
+        <div className="px-4 py-2 bg-bg-sidebar border-b border-border flex items-center gap-2 animate-slide-up">
           <Search size={16} className="text-text-muted flex-shrink-0" />
           <input
             ref={searchInputRef}
@@ -454,7 +451,7 @@ const ChatWindow = ({
       {/* INPUT AREA */}
       {/* ============================================ */}
       <form
-        className="relative p-3 bg-bg-sidebar/90 backdrop-blur-xl border-t border-border shadow-soft z-30"
+        className="relative p-3 bg-bg-sidebar border-t border-border shadow-soft z-30"
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         onSubmit={sendMessage}
       >

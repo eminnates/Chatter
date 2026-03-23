@@ -89,14 +89,8 @@
   }
 
   /* ========================================
-     GLOBAL TRANSITIONS
+     THEME TRANSITIONS (only during theme switch)
      ======================================== */
-
-  * {
-    transition-property: background-color, border-color, color;
-    transition-duration: 200ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
 
   .theme-transitioning,
   .theme-transitioning * {
@@ -566,59 +560,15 @@ body.is-mobile .container {
   will-change: scroll-position;
 }
 
-/* Individual message items - GPU accelerated transforms */
+/* Message items - layout containment for rendering performance */
 .group\/message {
-  will-change: transform, opacity;
   contain: layout style paint;
-  transform: translateZ(0);
-  /* Force GPU layer */
-}
-
-/* User list items - smooth hover transitions */
-.user-list-item,
-.ripple-container {
-  will-change: transform;
-  contain: layout style;
-  backface-visibility: hidden;
-  transform: translateZ(0);
 }
 
 /* Sidebar scroll area */
 .scrollbar-thin {
   contain: strict;
   content-visibility: auto;
-}
-
-/* Animations - use GPU-friendly transforms */
-.animate-slide-up {
-  will-change: transform, opacity;
-  transform: translate3d(0, 0, 0);
-}
-
-.animate-fade-in {
-  will-change: opacity;
-}
-
-.animate-scale-in {
-  will-change: transform, opacity;
-  transform: translate3d(0, 0, 0);
-}
-
-/* Optimize heavy animations */
-.animate-bounce,
-.animate-ping,
-.animate-spin {
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-/* Avatar hover transitions - GPU accelerated */
-.group-hover\:scale-105,
-.group-hover\:scale-110,
-.hover\:scale-105,
-.active\:scale-95 {
-  will-change: transform;
-  backface-visibility: hidden;
 }
 
 /* Reduce paint on scrolling */

@@ -30,7 +30,7 @@ const IncomingCallModal = ({ call, onAccept, onDecline }) => {
   }, [call.id, onAccept, onDecline]);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+    <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-6 animate-fade-in">
       <div className="relative bg-bg-card border border-border rounded-3xl shadow-2xl max-w-md w-full p-8 animate-scale-in">
         
         {/* Decorative gradient background */}

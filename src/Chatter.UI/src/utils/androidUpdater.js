@@ -1,9 +1,18 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core'; // CapacitorHttp EKLENDİ
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import semver from 'semver';
+// Simple semver comparison — replaces the full semver package (~288KB)
+const semverGt = (a, b) => {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+};
 
-const GITHUB_USER = 'eminnates'; 
+const GITHUB_USER = 'eminnates';
 const GITHUB_REPO = 'Chatter';
 
 export const checkAndroidUpdate = async (showToast) => {
@@ -38,7 +47,7 @@ export const checkAndroidUpdate = async (showToast) => {
 
     console.log('Mevcut:', currentVersion, 'GitHub:', latestVersion);
 
-    if (semver.gt(latestVersion, currentVersion)) {
+    if (semverGt(latestVersion, currentVersion)) {
       const apkAsset = latestRelease.assets.find(asset => asset.name.endsWith('.apk'));
       
       if (apkAsset) {

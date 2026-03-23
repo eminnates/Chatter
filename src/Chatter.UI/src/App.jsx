@@ -15,7 +15,7 @@ import AuthScreen from './components/Auth/AuthScreen'
 import Sidebar from './components/Chat/Sidebar'
 import ChatWindow from './components/Chat/ChatWindow'
 import Toast from './components/Common/Toast'
-import TitleBar from './components/Common/TitleBar'
+const TitleBar = lazy(() => import('./components/Common/TitleBar'))
 import ErrorBoundary from './components/Common/ErrorBoundary'
 
 // --- COMPONENTS (Lazy loaded - reduces initial bundle ~30%) ---
@@ -841,13 +841,13 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <TitleBar />
+      <Suspense fallback={null}><TitleBar /></Suspense>
       <div className={`flex w-screen bg-bg-main overflow-hidden ${isDesktopApp ? 'h-[calc(100vh-32px)]' : 'h-full'}`}>
         <Toast toast={toast} />
 
         {isMobile && (
           <div
-            className={`fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 z-40 ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 bg-black/60 transition-opacity duration-300 z-40 ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setIsMobileSidebarOpen(false)}
           />
         )}

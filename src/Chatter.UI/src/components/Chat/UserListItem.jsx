@@ -94,9 +94,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
         
         {/* Online Badge with Animation */}
         {user.isOnline && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-bg-card rounded-full shadow-sm z-10">
-            <span className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75"></span>
-          </span>
+          <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-bg-card rounded-full shadow-sm z-10" />
         )}
       </div>
       
@@ -162,11 +160,8 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
           
           {/* Unread Badge with Pulse */}
           {user.unreadCount > 0 && (
-            <div className="relative flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gradient-to-br from-accent-warm to-accent-coral text-white text-[10px] font-bold shadow-soft shrink-0">
-              <span className="absolute inset-0 rounded-full bg-accent-warm animate-ping opacity-40"></span>
-              <span className="relative z-10">
-                {user.unreadCount > 99 ? '99+' : user.unreadCount}
-              </span>
+            <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gradient-to-br from-accent-warm to-accent-coral text-white text-[10px] font-bold shadow-soft shrink-0">
+              {user.unreadCount > 99 ? '99+' : user.unreadCount}
             </div>
           )}
         </div>
@@ -181,7 +176,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
         {/* Voice Call */}
         <button
           onClick={(e) => handleQuickAction(e, 'voice-call')}
-          className="p-1.5 rounded-lg bg-bg-card/95 backdrop-blur-sm border border-border-subtle hover:bg-accent-primary/10 hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
+          className="p-1.5 rounded-lg bg-bg-card border border-border-subtle hover:bg-accent-primary/10 hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
           title="Voice call"
           aria-label="Voice call"
         >
@@ -191,7 +186,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
         {/* Video Call */}
         <button
           onClick={(e) => handleQuickAction(e, 'video-call')}
-          className="p-1.5 rounded-lg bg-bg-card/95 backdrop-blur-sm border border-border-subtle hover:bg-accent-warm/10 hover:border-accent-warm text-text-muted hover:text-accent-warm transition-all active:scale-90 shadow-sm"
+          className="p-1.5 rounded-lg bg-bg-card border border-border-subtle hover:bg-accent-warm/10 hover:border-accent-warm text-text-muted hover:text-accent-warm transition-all active:scale-90 shadow-sm"
           title="Video call"
           aria-label="Video call"
         >
@@ -204,7 +199,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
             e.stopPropagation();
             onContextMenu(e);
           }}
-          className="p-1.5 rounded-lg bg-bg-card/95 backdrop-blur-sm border border-border-subtle hover:bg-accent-light hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
+          className="p-1.5 rounded-lg bg-bg-card border border-border-subtle hover:bg-accent-light hover:border-accent-primary text-text-muted hover:text-accent-primary transition-all active:scale-90 shadow-sm"
           title="More options"
           aria-label="More options"
         >
