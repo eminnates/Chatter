@@ -104,6 +104,53 @@ public class ChatController : BaseApiController
         return HandleResult(result);
     }
 
+    // 7. Mesaj Düzenleme
+    [HttpPut("messages/{messageId}")]
+    public async Task<IActionResult> EditMessage(Guid messageId, [FromBody] UpdateMessageRequest request)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.EditMessageAsync(messageId, currentUserId, request.Content);
+        return HandleResult(result);
+    }
+
+    // 8. Mesaj Arama
+    [HttpGet("conversations/{conversationId}/messages/search")]
+    public async Task<IActionResult> SearchMessages(Guid conversationId, [FromQuery] string query)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest(new { error = "Arama sorgusu boş olamaz." });
+
+        var result = await _chatService.SearchMessagesAsync(conversationId, currentUserId, query);
+        return HandleResult(result);
+    }
+
+    // 9. Reaksiyon Ekleme
+    [HttpPost("messages/{messageId}/reactions")]
+    public async Task<IActionResult> AddReaction(Guid messageId, [FromBody] AddReactionRequest request)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.AddReactionAsync(messageId, currentUserId, request.Emoji);
+        return HandleResult(result);
+    }
+
+    // 10. Reaksiyon Kaldırma
+    [HttpDelete("messages/{messageId}/reactions/{emoji}")]
+    public async Task<IActionResult> RemoveReaction(Guid messageId, string emoji)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.RemoveReactionAsync(messageId, currentUserId, emoji);
+        return HandleResult(result);
+    }
+
     // --- Yardımcı Metot ---
     private bool TryGetCurrentUserId(out Guid userId)
     {

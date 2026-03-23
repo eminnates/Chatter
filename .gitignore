@@ -107,6 +107,8 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.*.production
 
 .env.production.local
 # Build outputs
@@ -120,3 +122,6 @@ uploads/
 
 **/firebase-service-account.json
 firebase-service-account.json
+src/Chatter.UI/.env.production
+CLAUDE.md
+

@@ -1,14 +1,20 @@
-import { memo, useState, useRef, useEffect } from 'react';
-import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply, Copy, Forward, Trash2, MoreVertical, Loader2, AlertCircle } from 'lucide-react';
-import SecureImage from '../Common/SecureImage'; 
-import { BACKEND_URL } from '../../config/constants'; 
+import { memo, useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply, Copy, Loader2, AlertCircle, Smile, Pencil } from 'lucide-react';
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
+import SecureImage from '../Common/SecureImage';
+import { BACKEND_URL } from '../../config/constants';
 
-const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile }) => {
+const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, onAddReaction, onRemoveReaction, onRetry, isMobile }) => {
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
   const longPressTimer = useRef(null);
-  
+  const emojiPickerRef = useRef(null);
+  const editInputRef = useRef(null);
+
   // --- ID CHECK ---
   const rawMsgSenderId = msg.senderId || msg.SenderId || '';
   const rawCurrentUserId = currentUserId || '';
@@ -28,19 +34,19 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
       const now = new Date();
       const diffMs = now - msgDate;
       const diffMins = Math.floor(diffMs / 60000);
-      
+
       // If today, show time
       if (diffMins < 1440) {
         return msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       }
-      
+
       // If yesterday
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
       if (msgDate.toDateString() === yesterday.toDateString()) {
         return 'Yesterday';
       }
-      
+
       // Older messages
       return msgDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } catch {
@@ -50,6 +56,15 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
 
   // --- REPLY DATA ---
   const replyData = msg.replyMessage || msg.ReplyMessage;
+
+  // --- REACTIONS DATA ---
+  const reactions = msg.reactions || [];
+  const groupedReactions = reactions.reduce((acc, r) => {
+    const emoji = r.emoji || r.Emoji;
+    if (!acc[emoji]) acc[emoji] = [];
+    acc[emoji].push(r.userId || r.UserId);
+    return acc;
+  }, {});
 
   // --- MOBILE LONG PRESS ---
   const handleTouchStart = () => {
@@ -63,21 +78,50 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
     }, 500);
   };
 
+  const handleTouchMove = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const handleTouchEnd = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
   // Close mobile actions on outside click
   useEffect(() => {
     if (!showMobileActions) return;
-    
+
     const handleClickOutside = () => setShowMobileActions(false);
     document.addEventListener('click', handleClickOutside);
-    
+
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showMobileActions]);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleClickOutside = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
+  // Focus edit input when editing
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.setSelectionRange(editContent.length, editContent.length);
+    }
+  }, [isEditing]);
 
   // --- ACTIONS ---
   const handleCopy = async () => {
@@ -102,18 +146,54 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
     setShowMobileActions(false);
   };
 
+  const handleStartEdit = () => {
+    setEditContent(msg.content || '');
+    setIsEditing(true);
+    setShowMobileActions(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditContent('');
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editContent.trim();
+    if (!trimmed || trimmed === msg.content) {
+      handleCancelEdit();
+      return;
+    }
+    onEdit?.(msg.id, trimmed);
+    setIsEditing(false);
+    setEditContent('');
+  };
+
+  const handleEmojiSelect = (emojiData) => {
+    onAddReaction?.(msg.id, emojiData.emoji);
+    setShowEmojiPicker(false);
+  };
+
+  const handleReactionClick = (emoji) => {
+    const myReaction = groupedReactions[emoji]?.some(uid => String(uid).toLowerCase() === myId);
+    if (myReaction) {
+      onRemoveReaction?.(msg.id, emoji);
+    } else {
+      onAddReaction?.(msg.id, emoji);
+    }
+  };
+
   // --- SYSTEM MESSAGES ---
   if (msg.type === 'System' || msg.type === 2) {
     const content = msg.content || '';
     const isNegative = content.includes('declined') || content.includes('Missed') || content.includes('ended');
     const isSuccess = content.includes('started') || content.includes('answered');
-    
+
     return (
       <div className="flex flex-col items-center my-6 animate-fade-in">
         <div className={`
           flex items-center gap-2.5 px-5 py-2 rounded-full text-xs font-medium shadow-soft backdrop-blur-sm transition-all hover:scale-105
-          ${isNegative 
-            ? 'bg-red-500/10 border border-red-500/20 text-red-400' 
+          ${isNegative
+            ? 'bg-red-500/10 border border-red-500/20 text-red-400'
             : isSuccess
             ? 'bg-green-500/10 border border-green-500/20 text-green-400'
             : 'bg-accent-light/50 border border-accent-primary/20 text-text-muted'
@@ -130,44 +210,67 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
       </div>
     );
   }
-  
+
   // --- NORMAL MESSAGE ---
   return (
     <div className={`
       flex flex-col mb-3 w-full animate-slide-up group/message relative
       ${isSentByMe ? 'items-end' : 'items-start'}
     `}>
-      
+
       {/* --- MESSAGE WRAPPER --- */}
-      <div 
+      <div
         className="relative flex items-center max-w-[85%] md:max-w-[70%] lg:max-w-[600px]"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onTouchMove={handleTouchEnd}
+        onTouchMove={handleTouchMove}
       >
-        
-        {/* --- REPLY BUTTON (Desktop Hover / Mobile Long-press) --- */}
-        <button
-          onClick={handleReply}
-          className={`
-            absolute p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted 
-            hover:text-accent-primary hover:bg-accent-light hover:scale-110 active:scale-95
-            transition-all duration-200 z-10
-            ${isSentByMe ? '-left-12' : '-right-12'}
-            ${isMobile 
-              ? (showMobileActions ? 'opacity-100' : 'opacity-0 pointer-events-none')
-              : 'opacity-0 group-hover/message:opacity-100'
-            }
-          `}
-          title="Reply"
-          aria-label="Reply to message"
-        >
-          <Reply size={16} />
-        </button>
 
-        {/* --- MORE ACTIONS (Mobile) --- */}
+        {/* --- ACTION BUTTONS (Desktop Hover / Mobile Long-press) --- */}
+        <div className={`
+          absolute flex items-center gap-1 z-10
+          ${isSentByMe ? '-left-24' : '-right-24'}
+          ${isMobile
+            ? (showMobileActions ? 'opacity-100' : 'opacity-0 pointer-events-none')
+            : 'opacity-0 group-hover/message:opacity-100 pointer-events-none group-hover/message:pointer-events-auto'
+          }
+          transition-all duration-200
+        `}>
+          <button
+            onClick={handleReply}
+            className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-accent-primary hover:bg-accent-light hover:scale-110 active:scale-95 transition-all"
+            title="Reply"
+            aria-label="Reply to message"
+          >
+            <Reply size={14} />
+          </button>
+
+          {/* Emoji reaction button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
+            className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all"
+            title="React"
+            aria-label="Add reaction"
+          >
+            <Smile size={14} />
+          </button>
+
+          {/* Edit button (only for own text messages) */}
+          {isSentByMe && msg.content && (
+            <button
+              onClick={handleStartEdit}
+              className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-blue-500 hover:bg-blue-500/10 hover:scale-110 active:scale-95 transition-all"
+              title="Edit"
+              aria-label="Edit message"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* --- MORE ACTIONS (Mobile - Copy) --- */}
         {isMobile && showMobileActions && (
-          <div 
+          <div
             className={`
               absolute flex items-center gap-1 z-10 animate-slide-in
               ${isSentByMe ? '-right-14' : '-left-14'}
@@ -187,17 +290,37 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
           </div>
         )}
 
+        {/* --- EMOJI PICKER POPUP --- */}
+        {showEmojiPicker && (
+          <div
+            ref={emojiPickerRef}
+            className={`absolute z-50 ${isSentByMe ? 'right-0' : 'left-0'} bottom-full mb-2`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EmojiPicker
+              onEmojiClick={handleEmojiSelect}
+              width={isMobile ? Math.min(300, window.innerWidth - 40) : 300}
+              height={isMobile ? 300 : 350}
+              searchDisabled={isMobile}
+              skinTonesDisabled
+              previewConfig={{ showPreview: false }}
+              theme="dark"
+              lazyLoadEmojis
+            />
+          </div>
+        )}
+
         {/* --- MESSAGE BUBBLE --- */}
         <div className={`
           relative w-full px-4 py-2.5 shadow-soft text-sm break-words transition-all hover:shadow-soft-lg
-          ${isSentByMe 
-            ? 'bg-gradient-to-br from-accent-primary to-accent-secondary text-white rounded-2xl rounded-tr-md' 
+          ${isSentByMe
+            ? 'bg-gradient-to-br from-accent-primary to-accent-secondary text-white rounded-2xl rounded-tr-md'
             : 'bg-bg-card border border-border-subtle text-text-main rounded-2xl rounded-tl-md'
           }
           ${hasError ? 'border-2 border-red-500/50' : ''}
           ${isSending ? 'opacity-70' : ''}
         `}>
-          
+
           {/* --- SENDER NAME (Group chats) --- */}
           {!isSentByMe && msg.senderName && (
             <div className="text-xs font-semibold text-accent-primary mb-1">
@@ -207,12 +330,12 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
 
           {/* --- REPLY CONTEXT --- */}
           {replyData && (
-            <div 
+            <div
               className={`
                 mb-2 p-2.5 rounded-lg text-xs border-l-4 cursor-pointer select-none
                 flex flex-col gap-0.5 hover:bg-black/10 dark:hover:bg-white/5 transition-colors
-                ${isSentByMe 
-                  ? 'bg-black/20 border-white/50 text-white/90' 
+                ${isSentByMe
+                  ? 'bg-black/20 border-white/50 text-white/90'
                   : 'bg-bg-hover/50 border-accent-primary text-text-muted'
                 }
               `}
@@ -232,25 +355,25 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
 
           {/* --- ATTACHMENTS --- */}
           {msg.attachments?.map((att, index) => {
-            const isImage = att.type === 1 || 
-                          att.type === 'Image' || 
+            const isImage = att.type === 1 ||
+                          att.type === 'Image' ||
                           (att.fileName && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(att.fileName));
-            
+
             return (
               <div key={att.id || index} className={msg.content ? "mb-2.5" : "mb-0"}>
                 {isImage ? (
-                  
+
                   // --- IMAGE ATTACHMENT ---
-                  <div 
-                    className="group/img relative cursor-pointer overflow-hidden rounded-xl border-2 border-transparent hover:border-accent-primary/30 transition-all active:scale-95" 
+                  <div
+                    className="group/img relative cursor-pointer overflow-hidden rounded-xl border-2 border-transparent hover:border-accent-primary/30 transition-all active:scale-95"
                     onClick={() => onImageClick(`${BACKEND_URL}${att.fileUrl}`)}
                   >
-                    <SecureImage 
-                      src={`${BACKEND_URL}${att.fileUrl}`} 
-                      alt={att.fileName || 'Image'} 
-                      className="w-full h-auto max-h-[300px] object-cover" 
+                    <SecureImage
+                      src={`${BACKEND_URL}${att.fileUrl}`}
+                      alt={att.fileName || 'Image'}
+                      className="w-full h-auto max-h-[300px] object-cover"
                     />
-                    
+
                     {/* Image Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 flex items-end justify-between p-3">
                       <span className="text-white text-xs font-medium truncate flex-1">
@@ -261,17 +384,17 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
                   </div>
 
                 ) : (
-                  
+
                   // --- FILE ATTACHMENT ---
-                  <a 
-                    href={`${BACKEND_URL}${att.fileUrl}`} 
+                  <a
+                    href={`${BACKEND_URL}${att.fileUrl}`}
                     download={att.fileName}
-                    target="_blank" 
-                    rel="noreferrer" 
+                    target="_blank"
+                    rel="noreferrer"
                     className={`
                       flex items-center gap-3 p-3 rounded-xl transition-all no-underline group/file active:scale-95
-                      ${isSentByMe 
-                        ? 'bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40' 
+                      ${isSentByMe
+                        ? 'bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40'
                         : 'bg-bg-hover/50 hover:bg-bg-hover border border-border-subtle hover:border-accent-primary/40'
                       }
                     `}
@@ -279,14 +402,14 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
                     {/* File Icon */}
                     <div className={`
                       p-2 rounded-lg transition-all group-hover/file:scale-110
-                      ${isSentByMe 
-                        ? 'bg-white/10 text-white' 
+                      ${isSentByMe
+                        ? 'bg-white/10 text-white'
                         : 'bg-accent-light text-accent-primary'
                       }
                     `}>
                       <File size={18} />
                     </div>
-                    
+
                     {/* File Info */}
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs font-medium truncate ${isSentByMe ? 'text-white' : 'text-text-main'}`}>
@@ -296,11 +419,11 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
                         {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB • ` : ''}Tap to download
                       </p>
                     </div>
-                    
+
                     {/* Download Icon */}
-                    <Download 
-                      size={16} 
-                      className={`flex-shrink-0 opacity-50 group-hover/file:opacity-100 transition-opacity ${isSentByMe ? 'text-white' : 'text-accent-primary'}`} 
+                    <Download
+                      size={16}
+                      className={`flex-shrink-0 opacity-50 group-hover/file:opacity-100 transition-opacity ${isSentByMe ? 'text-white' : 'text-accent-primary'}`}
                     />
                   </a>
                 )}
@@ -308,11 +431,54 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
             );
           })}
 
-          {/* --- TEXT CONTENT --- */}
-          {msg.content && (
+          {/* --- TEXT CONTENT / EDIT MODE --- */}
+          {isEditing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                ref={editInputRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveEdit(); }
+                  if (e.key === 'Escape') handleCancelEdit();
+                }}
+                className={`w-full px-2 py-1.5 rounded-lg text-[15px] resize-none outline-none min-h-[36px] max-h-24 ${
+                  isSentByMe
+                    ? 'bg-white/20 text-white placeholder-white/50 border border-white/30 focus:border-white/60'
+                    : 'bg-bg-hover text-text-main border border-border focus:border-accent-primary'
+                }`}
+                rows={1}
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={handleCancelEdit}
+                  className={`text-[11px] px-2 py-1 rounded-md transition-all ${
+                    isSentByMe ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-text-muted hover:text-text-main hover:bg-bg-hover'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className={`text-[11px] px-2 py-1 rounded-md font-medium transition-all ${
+                    isSentByMe ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30'
+                  }`}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : msg.content ? (
             <p className="leading-relaxed whitespace-pre-wrap text-[15px] select-text">
               {msg.content}
             </p>
+          ) : null}
+
+          {/* --- EDITED LABEL --- */}
+          {(msg.editedAt || msg.EditedAt) && !isEditing && (
+            <span className={`text-[10px] italic mt-1 block ${isSentByMe ? 'text-white/50' : 'text-text-muted/60'}`}>
+              edited
+            </span>
           )}
 
           {/* --- SENDING/ERROR INDICATOR --- */}
@@ -349,18 +515,42 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
                 {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
               </button>
             )}
-            
-            {/* Future: Forward, Delete, etc. */}
           </div>
         )}
       </div>
-      
+
+      {/* --- REACTIONS DISPLAY --- */}
+      {Object.keys(groupedReactions).length > 0 && (
+        <div className={`flex flex-wrap gap-1 mt-1.5 px-1 ${isSentByMe ? 'justify-end' : 'justify-start'}`}>
+          {Object.entries(groupedReactions).map(([emoji, userIds]) => {
+            const iReacted = userIds.some(uid => String(uid).toLowerCase() === myId);
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleReactionClick(emoji)}
+                className={`
+                  flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all active:scale-90
+                  ${iReacted
+                    ? 'bg-accent-primary/15 border-accent-primary/40 text-accent-primary'
+                    : 'bg-bg-card/80 border-border-subtle text-text-muted hover:border-accent-primary/30'
+                  }
+                `}
+                title={`${userIds.length} reaction${userIds.length > 1 ? 's' : ''}`}
+              >
+                <span className="text-sm">{emoji}</span>
+                {userIds.length > 1 && <span className="text-[10px] font-medium">{userIds.length}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* --- TIME & STATUS --- */}
       <div className="flex items-center gap-1.5 mt-1 px-1">
         <span className={`text-[10px] font-medium ${hasError ? 'text-red-400' : 'text-text-muted'}`}>
           {formatTime(msg.sentAt)}
         </span>
-        
+
         {isSentByMe && !hasError && !isSending && (
           <span className={`flex items-center transition-colors ${msg.isRead ? 'text-blue-400' : 'text-text-muted/60'}`}>
             {msg.isRead ? (
@@ -373,7 +563,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, isMobile 
 
         {hasError && (
           <button
-            onClick={() => console.log('Retry send:', msg.id)}
+            onClick={() => onRetry?.(msg)}
             className="text-[10px] text-red-400 underline hover:text-red-300"
           >
             Retry

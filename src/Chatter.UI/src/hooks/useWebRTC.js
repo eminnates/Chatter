@@ -1,16 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Peer from 'simple-peer';
 import { Capacitor } from '@capacitor/core';
+import { isVideoCallType } from '../utils/helpers';
 
 // Check if running on native platform and import permissions plugin dynamically
-const requestNativePermissions = async () => {
+const requestNativePermissions = async (needsVideo = true) => {
   if (!Capacitor.isNativePlatform()) return true;
-  
+
   try {
-    const { Camera } = await import('@capacitor/camera');
-    const cameraPermission = await Camera.requestPermissions({ permissions: ['camera'] });
-    console.log('📷 Camera permission:', cameraPermission);
-    return cameraPermission.camera === 'granted';
+    // Kamera izni (video calls)
+    if (needsVideo) {
+      const { Camera } = await import('@capacitor/camera');
+      const cameraPermission = await Camera.requestPermissions({ permissions: ['camera'] });
+      console.log('📷 Camera permission:', cameraPermission);
+      if (cameraPermission.camera !== 'granted') return false;
+    }
+    // Mikrofon izni — browser getUserMedia ile tetiklenir, native'de ek izin gerekmez
+    // Android 12+ için microphone izni AndroidManifest.xml'de tanımlı olmalı
+    return true;
   } catch (error) {
     console.warn('⚠️ Native permission request failed, falling back to browser API:', error);
     return true;
@@ -27,6 +34,12 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const callTimeoutRef = useRef(null);
+  const activeCallRef = useRef(null);
+
+  // activeCall ref'ini her zaman güncel tut
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
 
   // Get user media (camera/microphone)
   const getUserMedia = useCallback(async (isVideoCall) => {
@@ -34,9 +47,9 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       // Request native permissions first on mobile
       if (Capacitor.isNativePlatform()) {
         console.log('📱 Requesting native permissions...');
-        const hasPermission = await requestNativePermissions();
+        const hasPermission = await requestNativePermissions(isVideoCall);
         if (!hasPermission) {
-          throw new Error('Camera permission denied');
+          throw new Error(isVideoCall ? 'Camera permission denied' : 'Microphone permission denied');
         }
       }
       
@@ -54,7 +67,19 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       };
       
       console.log('🎥 Requesting media with constraints:', constraints);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (mediaError) {
+        // Video başarısız olursa audio-only'ye geç
+        if (isVideoCall && (mediaError.name === 'NotFoundError' || mediaError.name === 'NotReadableError')) {
+          console.warn('⚠️ Video failed, falling back to audio-only');
+          if (showToast) showToast('Camera unavailable, using audio only', 'info');
+          stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: constraints.audio });
+        } else {
+          throw mediaError;
+        }
+      }
       console.log('✅ Got media stream:', stream.getTracks().map(t => `${t.kind}: ${t.label}`));
       
       setLocalStream(stream);
@@ -131,27 +156,27 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
     });
 
     peer.on('signal', (data) => {
-      if (!activeCall) {
+      const call = activeCallRef.current;
+      if (!call) {
         console.warn('⚠️ No active call, ignoring signal');
         return;
       }
-      
+
       if (data.type === 'offer') {
         console.log('📤 Sending WebRTC offer');
-        connection.invoke('SendWebRTCOffer', activeCall.id, JSON.stringify(data))
+        connection.invoke('SendWebRTCOffer', call.id, JSON.stringify(data))
           .catch(err => console.error('❌ Error sending offer:', err));
-          
+
       } else if (data.type === 'answer') {
         console.log('📤 Sending WebRTC answer');
-        connection.invoke('SendWebRTCAnswer', activeCall.id, JSON.stringify(data))
+        connection.invoke('SendWebRTCAnswer', call.id, JSON.stringify(data))
           .catch(err => console.error('❌ Error sending answer:', err));
-          
+
       } else if (data.candidate) {
-        // Only send valid ICE candidates
         if (data.candidate.candidate && data.candidate.candidate.trim() !== '') {
           console.log('📤 Sending ICE candidate');
-          connection.invoke('SendICECandidate', 
-            activeCall.id, 
+          connection.invoke('SendICECandidate',
+            call.id,
             JSON.stringify(data.candidate),
             data.candidate.sdpMid || '',
             data.candidate.sdpMLineIndex || 0
@@ -178,7 +203,7 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
 
     peerRef.current = peer;
     return peer;
-  }, [activeCall, connection, handleCallEnd, showToast]);
+  }, [connection, handleCallEnd, showToast]);
 
   // Initiate call
   const initiateCall = useCallback(async (receiverId, callType) => {
@@ -235,7 +260,7 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       setIsInitiator(false);
       
       // Handle both integer (1, 2) and string ('Audio', 'Video') enum values
-      const isVideoCall = callObject.type === 2 || callObject.type === 'Video' || callObject.type === 'video';
+      const isVideoCall = isVideoCallType(callObject);
       console.log(`🎥 Call type: ${isVideoCall ? 'video' : 'audio'}`);
       
       const stream = await getUserMedia(isVideoCall);
@@ -335,7 +360,7 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       setCallStatus('ringing');
       
       if (showNotification) {
-        const isVideo = call.type === 2 || call.type === 'Video' || call.type === 'video';
+        const isVideo = isVideoCallType(call);
         const callTypeText = isVideo ? 'Video' : 'Voice';
         const callerName = call.initiatorFullName || call.initiatorUsername || 'Someone';
         showNotification(call.initiatorId, callerName, `Incoming ${callTypeText} Call`);

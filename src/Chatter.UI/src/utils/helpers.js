@@ -8,6 +8,12 @@ export const triggerHaptic = async (style = ImpactStyle.Light) => {
 };
 
 
+// === CALL TYPE HELPER ===
+export const isVideoCallType = (call) => {
+  if (!call) return false;
+  return call.type === 2 || call.type === 'Video' || call.type === 'video';
+};
+
 // === SOUND EFFECTS ===
 export const createSoundEffect = (frequency, duration, type = 'sine', volume = 0.3) => {
   return () => {

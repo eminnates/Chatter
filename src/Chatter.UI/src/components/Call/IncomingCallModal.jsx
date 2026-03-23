@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Phone, Video, X, Check } from 'lucide-react';
 import Ripple from '../Common/Ripple';
+import { isVideoCallType } from '../../utils/helpers';
 
 const IncomingCallModal = ({ call, onAccept, onDecline }) => {
   if (!call) return null;
 
   // Call type check
-  const isVideoCall = call.type === 2 || call.type === "Video" || call.type === "video";
+  const isVideoCall = isVideoCallType(call);
   const callType = isVideoCall ? "Video" : "Voice";
 
   // Caller name

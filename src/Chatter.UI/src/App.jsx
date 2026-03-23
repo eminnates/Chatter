@@ -14,6 +14,7 @@ import Sidebar from './components/Chat/Sidebar'
 import ChatWindow from './components/Chat/ChatWindow'
 import Toast from './components/Common/Toast'
 import TitleBar from './components/Common/TitleBar'
+import ErrorBoundary from './components/Common/ErrorBoundary'
 
 // --- COMPONENTS (Lazy loaded - reduces initial bundle ~30%) ---
 const IncomingCallModal = lazy(() => import('./components/Call/IncomingCallModal'))
@@ -21,6 +22,9 @@ const ActiveCallScreen = lazy(() => import('./components/Call/ActiveCallScreen')
 const OutgoingCallScreen = lazy(() => import('./components/Call/OutgoingCallScreen'))
 const ProfilePage = lazy(() => import('./components/Profile/ProfilePage'))
 const Lightbox = lazy(() => import('./components/Common/Lightbox'))
+
+// --- UTILS ---
+import { storage } from './utils/storage'
 
 // --- HOOKS ---
 import { useWebRTC } from './hooks/useWebRTC'
@@ -32,6 +36,7 @@ import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { SplashScreen } from '@capacitor/splash-screen'
+import { Network } from '@capacitor/network'
 
 // Axios Config
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
@@ -45,13 +50,13 @@ const triggerHaptic = async (style = ImpactStyle.Light) => {
 
 function App() {
   // === STATES ===
-  const [token, setToken] = useState(() => localStorage.getItem('token'))
+  const [token, setToken] = useState(() => storage.getSync('token'))
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('user')) } catch { return null }
+    try { return JSON.parse(storage.getSync('user')) } catch { return null }
   })
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
-  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('soundEnabled') !== 'false')
+  const [theme, setTheme] = useState(() => storage.getSync('theme') || 'dark')
+  const [soundEnabled, setSoundEnabled] = useState(() => storage.getSync('soundEnabled') !== 'false')
 
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
@@ -63,6 +68,10 @@ function App() {
 
   // --- REPLY STATE ---
   const [replyingTo, setReplyingTo] = useState(null)
+
+  // --- SEARCH STATE ---
+  const [searchResults, setSearchResults] = useState(null)
+  const [isSearching, setIsSearching] = useState(false)
 
   const [lightboxImage, setLightboxImage] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -77,8 +86,10 @@ function App() {
   const [isAppActive, setIsAppActive] = useState(true)
   const [isFirstConnection, setIsFirstConnection] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true)
 
   // === REFS ===
+  const messageQueueRef = useRef([]);
   const selectedUserRef = useRef(null)
   const userRef = useRef(user)
   const usersRef = useRef(users)
@@ -88,6 +99,19 @@ function App() {
   const isMobileSidebarOpenRef = useRef(isMobileSidebarOpen);
   const showProfilePageRef = useRef(showProfilePage);
   const soundEnabledRef = useRef(soundEnabled);
+
+  // === NATIVE STORAGE HYDRATION ===
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    (async () => {
+      const nativeToken = await storage.get('token');
+      const nativeUser = await storage.get('user');
+      if (nativeToken && !token) setToken(nativeToken);
+      if (nativeUser && !user) {
+        try { setUser(JSON.parse(nativeUser)); } catch {}
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // === HELPER: GET SAFE USER ID ===
   const getSafeUserId = (u) => {
@@ -108,8 +132,8 @@ function App() {
   // === LOGOUT ===
   const logout = async () => {
     if (connection) try { await connection.stop(); } catch { }
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    await storage.remove('token');
+    await storage.remove('user');
     setToken(null);
     setUser(null);
   }
@@ -217,6 +241,8 @@ function App() {
     setSelectedUser(u);
     setIsTyping(false);
     setReplyingTo(null);
+    setSearchResults(null);
+    setIsSearching(false);
     markAsRead(u.id);
     if (isMobile) setIsMobileSidebarOpen(false);
   }, [markAsRead, isMobile]);
@@ -231,7 +257,17 @@ function App() {
 
   const showNotification = useCallback(async (senderId, senderName, messageContent) => {
     await triggerHaptic(ImpactStyle.Light)
-    if (!Capacitor.isNativePlatform() && 'Notification' in window && Notification.permission === 'granted') {
+    if (Capacitor.isNativePlatform()) {
+      // Capacitor local notification with tap handler
+      await LocalNotifications.schedule({
+        notifications: [{
+          title: senderName,
+          body: messageContent,
+          id: Date.now(),
+          extra: { senderId }
+        }]
+      }).catch(() => {});
+    } else if ('Notification' in window && Notification.permission === 'granted') {
       const notif = new Notification(senderName, {
         body: messageContent,
         icon: '/icon.png',
@@ -285,11 +321,38 @@ function App() {
           if (!canGoBack) CapacitorApp.exitApp(); else window.history.back();
         });
 
+        // Notification tap handler
+        LocalNotifications.addListener('localNotificationActionPerformed', (notification) => {
+          const senderId = notification.notification?.extra?.senderId;
+          if (senderId) {
+            const targetUser = usersRef.current.find(u => u.id === senderId);
+            if (targetUser) handleSelectUser(targetUser);
+          }
+        });
+
         if (Capacitor.getPlatform() === 'android') {
           setTimeout(() => { checkAndroidUpdate(showToast); }, 3000);
         }
       }
       if (window.electronAPI?.isElectron) document.body.classList.add('is-electron');
+
+      // Network durumu algılama (tüm platformlar)
+      Network.addListener('networkStatusChange', (status) => {
+        setIsNetworkOnline(status.connected);
+        if (status.connected) {
+          // Bağlantı geldiğinde kuyruktaki mesajları gönder
+          const conn = connectionRef.current;
+          if (conn?.state === signalR.HubConnectionState.Connected && messageQueueRef.current.length > 0) {
+            const queue = [...messageQueueRef.current];
+            messageQueueRef.current = [];
+            queue.forEach(msg => {
+              conn.invoke('SendMessage', msg).catch(console.error);
+            });
+          }
+        }
+      });
+      // İlk yüklemede network durumunu oku
+      Network.getStatus().then(s => setIsNetworkOnline(s.connected));
     }
     init();
   }, [loadUsers, showToast]);
@@ -306,7 +369,7 @@ function App() {
   useEffect(() => {
     document.documentElement.classList.add('theme-transitioning')
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
+    storage.set('theme', theme)
     setTimeout(() => { document.documentElement.classList.remove('theme-transitioning') }, 300)
   }, [theme])
 
@@ -318,10 +381,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (token && !localStorage.getItem('notificationAsked')) {
+    if (token && !storage.getSync('notificationAsked')) {
       setTimeout(() => {
         requestNotificationPermission()
-        localStorage.setItem('notificationAsked', 'true')
+        storage.set('notificationAsked', 'true')
       }, 3000)
     }
   }, [token, requestNotificationPermission])
@@ -348,7 +411,7 @@ function App() {
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        accessTokenFactory: () => token,
+        accessTokenFactory: () => tokenRef.current,
         skipNegotiation: true,
         transport: signalR.HttpTransportType.WebSockets
       })
@@ -361,15 +424,30 @@ function App() {
         setConnection(newConnection);
         setConnectionStatus('connected');
         newConnection.invoke('SetUserOnline').then(() => loadUsers(token)).catch(console.error);
+        // Kuyruktaki mesajları gönder
+        if (messageQueueRef.current.length > 0) {
+          const queue = [...messageQueueRef.current];
+          messageQueueRef.current = [];
+          queue.forEach(msg => newConnection.invoke('SendMessage', msg).catch(console.error));
+        }
       })
       .catch(err => {
         console.error("❌ Connection failed:", err);
         setConnectionStatus('failed');
       });
 
-    newConnection.onreconnected(() => {
+    newConnection.onreconnected(async () => {
       setConnectionStatus('connected');
-      newConnection.invoke('SetUserOnline').then(() => loadUsers(tokenRef.current));
+      try {
+        // Token geçerliliğini doğrula
+        await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${tokenRef.current}` } });
+        newConnection.invoke('SetUserOnline').then(() => loadUsers(tokenRef.current));
+      } catch (err) {
+        if (err.response?.status === 401) {
+          console.error('Token expired during reconnect');
+          logout();
+        }
+      }
     });
 
     newConnection.onclose(() => setConnectionStatus('disconnected'));
@@ -381,6 +459,21 @@ function App() {
       const isSelected = String(senderId) === String(selectedUserRef.current?.id);
 
       if (isMyMsg) {
+        // Optimistik mesajı backend'den dönen gerçek mesajla değiştir
+        setMessages(prev => {
+          const msgId = msg.id || msg.Id;
+          const tempIdx = prev.findIndex(m =>
+            typeof m.id === 'number' && m.content === msg.content && String(m.senderId) === String(myId)
+          );
+          if (tempIdx !== -1) {
+            const updated = [...prev];
+            updated[tempIdx] = msg;
+            return updated;
+          }
+          // Duplikasyon kontrolü
+          if (msgId && prev.some(m => String(m.id) === String(msgId))) return prev;
+          return prev;
+        });
         setUsers(prev => prev.map(u => {
           if (u.id === selectedUserRef.current?.id) {
             return {
@@ -396,7 +489,22 @@ function App() {
       }
 
       if (isSelected) {
-        setMessages(prev => [...prev, msg]);
+        setMessages(prev => {
+          // Deduplication: eğer bu mesaj zaten varsa ekleme
+          const msgId = msg.id || msg.Id;
+          if (msgId && prev.some(m => String(m.id) === String(msgId))) return prev;
+          // Optimistik mesajla eşleştir: aynı content + yakın zaman
+          const tempIdx = prev.findIndex(m =>
+            typeof m.id === 'number' && m.content === msg.content && String(m.senderId) === String(msg.senderId)
+          );
+          if (tempIdx !== -1) {
+            // Geçici mesajı backend'den dönenle değiştir
+            const updated = [...prev];
+            updated[tempIdx] = msg;
+            return updated;
+          }
+          return [...prev, msg];
+        });
         playSound('messageReceived');
         markAsRead(senderId);
       } else {
@@ -432,6 +540,43 @@ function App() {
 
     newConnection.on('UserStoppedTyping', (userId) => {
       if (String(selectedUserRef.current?.id) === String(userId)) setIsTyping(false);
+    });
+
+    // --- MESSAGE EDITED ---
+    newConnection.on('MessageEdited', (edited) => {
+      const msgId = edited.id || edited.Id;
+      setMessages(prev => prev.map(m =>
+        String(m.id) === String(msgId)
+          ? { ...m, content: edited.content || edited.Content, editedAt: edited.editedAt || edited.EditedAt }
+          : m
+      ));
+    });
+
+    // --- REACTIONS ---
+    newConnection.on('ReactionAdded', (data) => {
+      const { messageId, userId, emoji } = data;
+      setMessages(prev => prev.map(m => {
+        if (String(m.id) !== String(messageId)) return m;
+        const existing = (m.reactions || []);
+        const alreadyExists = existing.some(r =>
+          String(r.userId) === String(userId) && r.emoji === emoji
+        );
+        if (alreadyExists) return m;
+        return { ...m, reactions: [...existing, { userId, emoji }] };
+      }));
+    });
+
+    newConnection.on('ReactionRemoved', (data) => {
+      const { messageId, userId, emoji } = data;
+      setMessages(prev => prev.map(m => {
+        if (String(m.id) !== String(messageId)) return m;
+        return {
+          ...m,
+          reactions: (m.reactions || []).filter(r =>
+            !(String(r.userId) === String(userId) && r.emoji === emoji)
+          )
+        };
+      }));
     });
 
     return () => {
@@ -474,6 +619,102 @@ function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [connection, loadUsers]);
+
+  // === EDIT MESSAGE ===
+  const handleEditMessage = useCallback(async (messageId, newContent) => {
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+      showToast('Not connected', 'error');
+      return;
+    }
+    // Orijinal content'i sakla (rollback için)
+    const originalMsg = messages.find(m => String(m.id) === String(messageId));
+    const originalContent = originalMsg?.content;
+
+    // Optimistic update
+    setMessages(prev => prev.map(m =>
+      String(m.id) === String(messageId)
+        ? { ...m, content: newContent, editedAt: new Date().toISOString() }
+        : m
+    ));
+    try {
+      await connection.invoke('EditMessage', messageId, newContent);
+    } catch (e) {
+      // Rollback
+      setMessages(prev => prev.map(m =>
+        String(m.id) === String(messageId)
+          ? { ...m, content: originalContent, editedAt: originalMsg?.editedAt }
+          : m
+      ));
+      showToast('Edit failed', 'error');
+      console.error(e);
+    }
+  }, [connection, showToast, messages]);
+
+  // === REACTIONS ===
+  const handleAddReaction = useCallback(async (messageId, emoji) => {
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) return;
+    try {
+      await connection.invoke('AddReaction', messageId, emoji);
+    } catch (e) {
+      showToast('Reaction failed', 'error');
+      console.error(e);
+    }
+  }, [connection, showToast]);
+
+  const handleRemoveReaction = useCallback(async (messageId, emoji) => {
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) return;
+    try {
+      await connection.invoke('RemoveReaction', messageId, emoji);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [connection]);
+
+  // === RETRY MESSAGE ===
+  const handleRetryMessage = useCallback(async (msg) => {
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+      showToast('Not connected', 'error');
+      return;
+    }
+    try {
+      await connection.invoke('SendMessage', {
+        receiverId: selectedUser?.id,
+        content: msg.content,
+        attachment: msg.attachments?.[0] || null,
+        replyToMessageId: msg.replyMessage?.id || null
+      });
+      // Başarılı olunca _pending flag'ini kaldır
+      setMessages(prev => prev.map(m =>
+        m.id === msg.id ? { ...m, _pending: false } : m
+      ));
+    } catch (e) {
+      showToast('Retry failed', 'error');
+      console.error(e);
+    }
+  }, [connection, selectedUser, showToast]);
+
+  // === SEARCH MESSAGES ===
+  const handleSearchMessages = useCallback(async (query) => {
+    if (!token || !selectedUser) return;
+    setIsSearching(true);
+    try {
+      const convRes = await axios.post(`${API_URL}/chat/conversation/${selectedUser.id}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const convId = convRes.data.value || convRes.data.id || convRes.data;
+      if (!convId) { setIsSearching(false); return; }
+
+      const res = await axios.get(
+        `${API_URL}/chat/conversations/${convId}/messages/search?query=${encodeURIComponent(query)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const results = Array.isArray(res.data) ? res.data : (res.data.data || []);
+      setSearchResults(results.sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt)));
+    } catch (e) {
+      setSearchResults([]);
+    }
+    setIsSearching(false);
+  }, [token, selectedUser]);
 
   // === SEND MESSAGE FUNCTION (OPTIMIZED FOR REPLY) ===
   const sendMessage = async (e) => {
@@ -537,15 +778,38 @@ function App() {
 
     playSound('messageSent');
 
+    // Y2: Mesaj gönderilince typing indicator'ı hemen temizle
+    if (connection?.state === signalR.HubConnectionState.Connected) {
+      connection.invoke('StopTyping', selectedUser.id).catch(() => {});
+    }
+
+    const messagePayload = {
+      receiverId: selectedUser.id,
+      content,
+      attachment: attachmentData,
+      replyToMessageId: replyToId
+    };
+
+    // Bağlantı yoksa kuyruğa ekle
+    if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+      messageQueueRef.current.push(messagePayload);
+      // Geçici mesajı "pending" olarak işaretle
+      setMessages(prev => prev.map(m =>
+        m.id === tempMsg.id ? { ...m, _pending: true } : m
+      ));
+      showToast('Message queued — will send when connected', 'info');
+      return;
+    }
+
     try {
-      await connection.invoke('SendMessage', {
-        receiverId: selectedUser.id,
-        content,
-        attachment: attachmentData,
-        replyToMessageId: replyToId // Backend DTO ile eşleşmeli
-      });
+      await connection.invoke('SendMessage', messagePayload);
     } catch (e) {
-      showToast('Send failed', 'error');
+      // Başarısızsa kuyruğa ekle
+      messageQueueRef.current.push(messagePayload);
+      setMessages(prev => prev.map(m =>
+        m.id === tempMsg.id ? { ...m, _pending: true } : m
+      ));
+      showToast('Send failed — will retry when connected', 'error');
       console.error(e);
     }
   };
@@ -561,19 +825,19 @@ function App() {
     };
 
     if (receivedToken && userData.id) {
-      localStorage.setItem('token', receivedToken);
-      localStorage.setItem('user', JSON.stringify(userData));
+      storage.set('token', receivedToken);
+      storage.set('user', JSON.stringify(userData));
       setToken(receivedToken);
       setUser(userData);
     }
   };
 
-  if (!token) return <AuthScreen onAuthSuccess={handleAuthSuccess} />
+  if (!token) return <ErrorBoundary><AuthScreen onAuthSuccess={handleAuthSuccess} /></ErrorBoundary>
 
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
   return (
-    <>
+    <ErrorBoundary>
       <TitleBar />
       <div className={`flex w-screen bg-bg-main overflow-hidden ${isElectron ? 'h-[calc(100vh-32px)]' : 'h-full'}`}>
         <Toast toast={toast} />
@@ -637,6 +901,13 @@ function App() {
               currentUserId={getSafeUserId(user)}
               replyingTo={replyingTo}
               setReplyingTo={setReplyingTo}
+              onEditMessage={handleEditMessage}
+              onAddReaction={handleAddReaction}
+              onRemoveReaction={handleRemoveReaction}
+              onSearchMessages={handleSearchMessages}
+              searchResults={searchResults}
+              isSearching={isSearching}
+              onRetryMessage={handleRetryMessage}
             />
           )}
         </div>
@@ -672,7 +943,7 @@ function App() {
           {lightboxImage && <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />}
         </Suspense>
       </div>
-    </>
+    </ErrorBoundary>
   )
 }
 

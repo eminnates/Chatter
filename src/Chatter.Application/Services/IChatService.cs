@@ -26,4 +26,14 @@ public interface IChatService
     Task<Result<Guid>> CreatePrivateConversationAsync(Guid senderId, Guid receiverId);
     // 6. Son Mesajı Getir
     Task<Result<MessageDto?>> GetLastMessageAsync(Guid conversationId);
+
+    // 7. Mesaj Düzenleme
+    Task<Result<MessageDto>> EditMessageAsync(Guid messageId, Guid userId, string newContent);
+
+    // 8. Mesaj Arama
+    Task<Result<IEnumerable<MessageDto>>> SearchMessagesAsync(Guid conversationId, Guid userId, string query);
+
+    // 9. Reaksiyon Ekleme/Kaldırma
+    Task<Result<MessageReactionDto>> AddReactionAsync(Guid messageId, Guid userId, string emoji);
+    Task<Result<bool>> RemoveReactionAsync(Guid messageId, Guid userId, string emoji);
 }

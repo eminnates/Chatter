@@ -291,6 +291,108 @@ public class ChatHub : Hub
         }
     }
 
+    // ==================== MESSAGE EDIT ====================
+
+    public async Task EditMessage(Guid messageId, string newContent)
+    {
+        var userIdString = Context.UserIdentifier;
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", "Geçersiz kullanıcı kimliği.");
+            return;
+        }
+
+        var result = await _chatService.EditMessageAsync(messageId, userId, newContent);
+        if (result.IsSuccess)
+        {
+            var messageDto = result.Value;
+            // Konuşmadaki tüm katılımcılara düzenlenen mesajı bildir
+            var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(messageDto.ConversationId);
+            if (conversation != null)
+            {
+                foreach (var participant in conversation.Participants)
+                {
+                    await Clients.User(participant.UserId.ToString()).SendAsync("MessageEdited", messageDto);
+                }
+            }
+        }
+        else
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", result.Error?.Message ?? "Mesaj düzenlenemedi.");
+        }
+    }
+
+    // ==================== REACTIONS ====================
+
+    public async Task AddReaction(Guid messageId, string emoji)
+    {
+        var userIdString = Context.UserIdentifier;
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", "Geçersiz kullanıcı kimliği.");
+            return;
+        }
+
+        var result = await _chatService.AddReactionAsync(messageId, userId, emoji);
+        if (result.IsSuccess)
+        {
+            // Mesajın hangi konuşmaya ait olduğunu bul
+            var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
+            if (message != null)
+            {
+                var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(message.ConversationId);
+                if (conversation != null)
+                {
+                    var payload = new { messageId, userId, emoji };
+                    foreach (var participant in conversation.Participants)
+                    {
+                        await Clients.User(participant.UserId.ToString()).SendAsync("ReactionAdded", payload);
+                    }
+                }
+            }
+        }
+        else
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", result.Error?.Message ?? "Reaksiyon eklenemedi.");
+        }
+    }
+
+    public async Task RemoveReaction(Guid messageId, string emoji)
+    {
+        var userIdString = Context.UserIdentifier;
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", "Geçersiz kullanıcı kimliği.");
+            return;
+        }
+
+        // Mesajın konuşmasını bul (silmeden önce)
+        var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
+        if (message == null)
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", "Mesaj bulunamadı.");
+            return;
+        }
+
+        var result = await _chatService.RemoveReactionAsync(messageId, userId, emoji);
+        if (result.IsSuccess)
+        {
+            var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(message.ConversationId);
+            if (conversation != null)
+            {
+                var payload = new { messageId, userId, emoji };
+                foreach (var participant in conversation.Participants)
+                {
+                    await Clients.User(participant.UserId.ToString()).SendAsync("ReactionRemoved", payload);
+                }
+            }
+        }
+        else
+        {
+            await Clients.Caller.SendAsync("ErrorMessage", result.Error?.Message ?? "Reaksiyon kaldırılamadı.");
+        }
+    }
+
     // ==================== CALL METHODS ====================
 
     public async Task InitiateCall(Guid receiverId, int callType)

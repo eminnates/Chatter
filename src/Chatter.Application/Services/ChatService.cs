@@ -48,9 +48,11 @@ public class ChatService : IChatService
                 FileUrl = a.FileUrl,
                 Type = a.Type.ToString()
             }).ToList(),
-            // HATA DÜZELTME: Reaction property'si henüz tanımlı olmadığı için burayı boş liste dönüyoruz.
-            // İleride Entity ve DTO'ya 'Reaction' veya 'Type' alanı eklenirse burayı açabilirsin.
-            Reactions = new List<MessageReactionDto>() 
+            Reactions = message.Reactions?.Select(r => new MessageReactionDto
+            {
+                UserId = r.UserId,
+                Emoji = r.Emoji
+            }).ToList() ?? new List<MessageReactionDto>()
         };
         return Result<MessageDto?>.Success(dto);
     }
@@ -214,11 +216,17 @@ public class ChatService : IChatService
                 SenderName = m.ReplyToMessage.Sender?.FullName ?? m.ReplyToMessage.Sender?.UserName ?? string.Empty,
                 Content = m.ReplyToMessage.Content
             } : null,
+            EditedAt = m.EditedAt,
             Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
                 FileUrl = a.FileUrl,
                 FileName = a.FileName,
                 Type = a.Type.ToString()
             }).ToList(),
+            Reactions = m.Reactions?.Select(r => new MessageReactionDto
+            {
+                UserId = r.UserId,
+                Emoji = r.Emoji
+            }).ToList() ?? new List<MessageReactionDto>()
         });
 
         return Result<IEnumerable<MessageDto>>.Success(dtos);
@@ -312,5 +320,112 @@ public class ChatService : IChatService
         await _unitOfWork.SaveChangesAsync();
         
         return Result<Guid>.Success(conversation.Id);
+    }
+
+    public async Task<Result<MessageDto>> EditMessageAsync(Guid messageId, Guid userId, string newContent)
+    {
+        var canEdit = await _unitOfWork.Messages.CanUserEditMessageAsync(messageId, userId);
+        if (!canEdit)
+            return Result<MessageDto>.Failure(new Error("Chat.EditDenied", "Bu mesajı düzenleme yetkiniz yok."));
+
+        // GetByIdAsync returns a tracked entity (uses FindAsync)
+        var trackedMessage = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        if (trackedMessage == null)
+            return Result<MessageDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
+
+        trackedMessage.Edit(newContent);
+        await _unitOfWork.SaveChangesAsync();
+
+        // Re-fetch with details for the DTO (AsNoTracking is fine here)
+        var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
+        if (message == null)
+            return Result<MessageDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
+
+        var dto = new MessageDto
+        {
+            Id = message.Id,
+            ConversationId = message.ConversationId,
+            SenderId = message.SenderId,
+            SenderName = message.Sender?.FullName ?? message.Sender?.UserName ?? "Unknown",
+            Content = message.Content,
+            Type = message.Type.ToString(),
+            SentAt = message.SentAt,
+            EditedAt = message.EditedAt,
+            IsRead = message.Status == MessageStatus.Read,
+            ReplyToMessageId = message.ReplyToMessageId,
+            Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
+            {
+                FileName = a.FileName,
+                FileUrl = a.FileUrl,
+                Type = a.Type.ToString()
+            }).ToList(),
+            Reactions = message.Reactions?.Select(r => new MessageReactionDto
+            {
+                UserId = r.UserId,
+                Emoji = r.Emoji
+            }).ToList() ?? new List<MessageReactionDto>()
+        };
+
+        return Result<MessageDto>.Success(dto);
+    }
+
+    public async Task<Result<IEnumerable<MessageDto>>> SearchMessagesAsync(Guid conversationId, Guid userId, string query)
+    {
+        var isParticipant = await _unitOfWork.Conversations.IsUserInConversationAsync(conversationId, userId);
+        if (!isParticipant)
+            return Result<IEnumerable<MessageDto>>.Failure(new Error("Chat.AccessDenied", "Bu konuşmaya erişim yetkiniz yok."));
+
+        var messages = await _unitOfWork.Messages.SearchMessagesAsync(conversationId, query);
+
+        var dtos = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            ConversationId = m.ConversationId,
+            SenderId = m.SenderId,
+            SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? "Unknown",
+            Content = m.Content,
+            Type = m.Type.ToString(),
+            SentAt = m.SentAt,
+            EditedAt = m.EditedAt,
+            IsRead = m.Status == MessageStatus.Read,
+        });
+
+        return Result<IEnumerable<MessageDto>>.Success(dtos);
+    }
+
+    public async Task<Result<MessageReactionDto>> AddReactionAsync(Guid messageId, Guid userId, string emoji)
+    {
+        var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
+        if (message == null)
+            return Result<MessageReactionDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
+
+        // Aynı emoji zaten varsa değiştirme
+        var existing = await _unitOfWork.Messages.GetReactionAsync(messageId, userId, emoji);
+        if (existing != null)
+            return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
+
+        var reaction = new MessageReaction
+        {
+            MessageId = messageId,
+            UserId = userId,
+            Emoji = emoji
+        };
+
+        await _unitOfWork.Messages.AddReactionAsync(reaction);
+        await _unitOfWork.SaveChangesAsync();
+
+        return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
+    }
+
+    public async Task<Result<bool>> RemoveReactionAsync(Guid messageId, Guid userId, string emoji)
+    {
+        var existing = await _unitOfWork.Messages.GetReactionAsync(messageId, userId, emoji);
+        if (existing == null)
+            return Result<bool>.Failure(new Error("Chat.NotFound", "Reaksiyon bulunamadı."));
+
+        await _unitOfWork.Messages.RemoveReactionAsync(existing);
+        await _unitOfWork.SaveChangesAsync();
+
+        return Result<bool>.Success(true);
     }
 }

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, memo, useMemo, useCallback } from 'react';
-import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile } from 'lucide-react';
+import { useEffect, useRef, useState, memo, useCallback } from 'react';
+import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search } from 'lucide-react';
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
 
@@ -25,22 +25,45 @@ const ChatWindow = ({
   showProfilePage,
   currentUserId,
   replyingTo,
-  setReplyingTo
+  setReplyingTo,
+  onEditMessage,
+  onAddReaction,
+  onRemoveReaction,
+  onSearchMessages,
+  searchResults,
+  isSearching,
+  onRetryMessage
 }) => {
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const isNearBottomRef = useRef(true);
   const [showConnectionWarning, setShowConnectionWarning] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // ============================================
-  // SCROLL MANAGEMENT - Optimized
+  // SCROLL MANAGEMENT - Smart auto-scroll
   // ============================================
+  // Kullanıcının scroll pozisyonunu takip et
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const threshold = 150; // px
+    isNearBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // Sadece alta yakınsa veya kendi mesajımızsa scroll et
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]); // ✅ Sadece mesajlar değiştiğinde
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
-  // Dosya/Reply seçildiğinde scroll (DOM güncellensin diye delay)
+  // Dosya/Reply secildiginde scroll (DOM guncellensin diye delay)
   useEffect(() => {
     if (selectedFile || replyingTo) {
       setTimeout(() => {
@@ -59,12 +82,24 @@ const ChatWindow = ({
   }, [selectedUser, isMobile]);
 
   // ============================================
-  // LOADING STATE - Mesajlar yüklenirken
+  // KEYBOARD HANDLING - Mobilde keyboard açılınca scroll
+  // ============================================
+  useEffect(() => {
+    if (!isMobile) return;
+    const onResize = () => {
+      // visualViewport shrinks when keyboard appears
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    };
+    window.visualViewport?.addEventListener('resize', onResize);
+    return () => window.visualViewport?.removeEventListener('resize', onResize);
+  }, [isMobile]);
+
+  // ============================================
+  // LOADING STATE - Mesajlar yuklenirken
   // ============================================
   useEffect(() => {
     if (selectedUser) {
       setIsLoadingMessages(true);
-      // Mesajlar yüklendiğinde false olacak
       const timer = setTimeout(() => {
         if (messages.length > 0) {
           setIsLoadingMessages(false);
@@ -82,7 +117,7 @@ const ChatWindow = ({
   }, [messages]);
 
   // ============================================
-  // CONNECTION WARNING - Bağlantı uyarısı
+  // CONNECTION WARNING - Baglanti uyarisi
   // ============================================
   useEffect(() => {
     if (connectionStatus !== 'connected' && messageInput.trim()) {
@@ -93,7 +128,31 @@ const ChatWindow = ({
   }, [connectionStatus, messageInput]);
 
   // ============================================
-  // MOBILE SWIPE GESTURE - Sidebar açma
+  // SEARCH - Reset on user change
+  // ============================================
+  useEffect(() => {
+    setShowSearch(false);
+    setSearchQuery('');
+  }, [selectedUser]);
+
+  // Focus search input when opened
+  useEffect(() => {
+    if (showSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showSearch]);
+
+  // Debounced search
+  useEffect(() => {
+    if (!showSearch || !searchQuery.trim()) return;
+    const timer = setTimeout(() => {
+      onSearchMessages?.(searchQuery.trim());
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, showSearch]);
+
+  // ============================================
+  // MOBILE SWIPE GESTURE - Sidebar acma
   // ============================================
   useEffect(() => {
     if (!isMobile) return;
@@ -112,7 +171,7 @@ const ChatWindow = ({
       const diffX = touchEndX - touchStartX;
       const diffY = Math.abs(touchEndY - touchStartY);
 
-      // Sağa swipe (yatay > dikey ve ekranın sol kenarından başladıysa)
+      // Saga swipe (yatay > dikey ve ekranin sol kenarindan basladiysa)
       if (diffX > 100 && diffY < 50 && touchStartX < 50) {
         onMobileMenuOpen();
       }
@@ -129,6 +188,9 @@ const ChatWindow = ({
       };
     }
   }, [isMobile, onMobileMenuOpen]);
+
+  // Determine which messages to display
+  const displayMessages = showSearch && searchQuery.trim() && searchResults ? searchResults : messages;
 
   // ============================================
   // EMPTY STATE
@@ -148,7 +210,7 @@ const ChatWindow = ({
               Ready to chat?
             </h2>
             <p className="text-text-muted leading-relaxed">
-              Pick a friend from the sidebar and start a warm conversation! 💬
+              Pick a friend from the sidebar and start a warm conversation!
             </p>
           </div>
         </div>
@@ -221,6 +283,21 @@ const ChatWindow = ({
 
         {/* Right: Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {/* Search Messages */}
+          <button
+            className={`relative p-2.5 rounded-xl transition-all active:scale-95 ripple-container ${
+              showSearch
+                ? 'bg-accent-primary/15 text-accent-primary'
+                : 'bg-bg-card hover:bg-accent-primary/10 text-text-muted hover:text-accent-primary'
+            }`}
+            onClick={() => { setShowSearch(s => !s); setSearchQuery(''); }}
+            title="Search Messages"
+            aria-label="Search messages"
+          >
+            <Search size={18} />
+            <Ripple color="rgba(184, 212, 168, 0.3)" />
+          </button>
+
           {/* Voice Call */}
           <button
             className="relative p-2.5 rounded-xl bg-bg-card hover:bg-accent-primary/10 text-accent-primary hover:shadow-glow disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 ripple-container"
@@ -248,10 +325,41 @@ const ChatWindow = ({
       </div>
 
       {/* ============================================ */}
+      {/* SEARCH BAR */}
+      {/* ============================================ */}
+      {showSearch && (
+        <div className="px-4 py-2 bg-bg-sidebar/80 backdrop-blur-sm border-b border-border flex items-center gap-2 animate-slide-up">
+          <Search size={16} className="text-text-muted flex-shrink-0" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search in conversation..."
+            className="flex-1 bg-transparent text-sm text-text-main placeholder-text-muted/60 outline-none"
+          />
+          {isSearching && <Loader2 size={16} className="text-accent-primary animate-spin flex-shrink-0" />}
+          {searchQuery && (
+            <span className="text-[11px] text-text-muted flex-shrink-0">
+              {searchResults ? `${searchResults.length} found` : ''}
+            </span>
+          )}
+          <button
+            onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+            className="p-1 rounded-full hover:bg-bg-hover text-text-muted hover:text-text-main transition-all"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ============================================ */}
       {/* MESSAGES AREA */}
       {/* ============================================ */}
       <div
         id="chat-messages-area"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent"
       >
         {/* Loading Skeleton */}
@@ -285,35 +393,42 @@ const ChatWindow = ({
               </div>
             ))}
           </div>
-        ) : messages.length === 0 ? (
+        ) : displayMessages.length === 0 ? (
           /* Empty State */
           <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
             <div className="w-16 h-16 mb-4 rounded-full bg-gradient-to-br from-accent-primary/20 to-accent-secondary/20 flex items-center justify-center">
-              <Smile size={32} className="text-accent-primary" />
+              {showSearch && searchQuery ? <Search size={32} className="text-text-muted" /> : <Smile size={32} className="text-accent-primary" />}
             </div>
             <p className="text-sm font-medium text-text-main mb-1">
-              No messages yet
+              {showSearch && searchQuery ? 'No messages found' : 'No messages yet'}
             </p>
             <p className="text-xs text-text-muted">
-              Start the conversation with {selectedUser.fullName || selectedUser.userName}!
+              {showSearch && searchQuery
+                ? `No results for "${searchQuery}"`
+                : `Start the conversation with ${selectedUser.fullName || selectedUser.userName}!`
+              }
             </p>
           </div>
         ) : (
           /* Messages List */
-          messages.map((msg, i) => (
+          displayMessages.map((msg, i) => (
             <MessageItem
-              key={msg.id || i}
+              key={msg.id || `temp-${i}`}
               msg={msg}
               currentUserId={currentUserId}
               onImageClick={onImageClick}
               onReply={setReplyingTo}
+              onEdit={onEditMessage}
+              onAddReaction={onAddReaction}
+              onRemoveReaction={onRemoveReaction}
+              onRetry={onRetryMessage}
               isMobile={isMobile}
             />
           ))
         )}
 
         {/* Typing Indicator */}
-        {isTyping && !isLoadingMessages && (
+        {isTyping && !isLoadingMessages && !showSearch && (
           <div className="flex items-center gap-2 p-3 w-fit bg-bg-card border border-border-subtle rounded-2xl rounded-tl-md shadow-soft animate-slide-up">
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 bg-accent-primary rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
@@ -333,6 +448,7 @@ const ChatWindow = ({
       {/* ============================================ */}
       <form
         className="relative p-3 bg-bg-sidebar/90 backdrop-blur-xl border-t border-border shadow-soft z-30"
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         onSubmit={sendMessage}
       >
 
@@ -352,8 +468,8 @@ const ChatWindow = ({
             <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse flex-shrink-0" />
             <span className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
               {connectionStatus === 'connecting'
-                ? '🔄 Reconnecting... Your message will be sent when connected.'
-                : '⚠️ Connection lost. Check your internet connection.'}
+                ? 'Reconnecting... Your message will be sent when connected.'
+                : 'Connection lost. Check your internet connection.'}
             </span>
           </div>
         )}

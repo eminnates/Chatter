@@ -153,4 +153,21 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
         var participant = message.Conversation.Participants.FirstOrDefault(p => p.UserId == userId);
         return participant?.Role is ParticipantRole.Admin or ParticipantRole.Owner;
     }
+
+    public async Task<MessageReaction?> GetReactionAsync(Guid messageId, Guid userId, string emoji, CancellationToken cancellationToken = default)
+    {
+        return await _context.Set<MessageReaction>()
+            .FirstOrDefaultAsync(r => r.MessageId == messageId && r.UserId == userId && r.Emoji == emoji, cancellationToken);
+    }
+
+    public async Task AddReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default)
+    {
+        await _context.Set<MessageReaction>().AddAsync(reaction, cancellationToken);
+    }
+
+    public async Task RemoveReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default)
+    {
+        _context.Set<MessageReaction>().Remove(reaction);
+        await Task.CompletedTask;
+    }
 }

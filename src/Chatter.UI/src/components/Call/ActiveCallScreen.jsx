@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Maximize2, Minimize2 } from 'lucide-react';
 import Ripple from '../Common/Ripple';
+import { isVideoCallType } from '../../utils/helpers';
 
 const ActiveCallScreen = ({ 
   localStream, 
@@ -105,17 +106,22 @@ const ActiveCallScreen = ({
     setIsVideoOff(!enabled);
   };
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen?.();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen?.();
+        setIsFullscreen(false);
+      }
+    } catch {
+      // iOS ve bazı platformlarda fullscreen desteklenmiyor
+      console.warn('Fullscreen not supported on this platform');
     }
   };
 
-  const isVideoCall = activeCall?.type === 2 || activeCall?.type === 'Video' || activeCall?.type === 'video';
+  const isVideoCall = isVideoCallType(activeCall);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">

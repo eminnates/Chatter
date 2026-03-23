@@ -16,5 +16,6 @@ public class MessageDto
     public Guid? ReplyToMessageId { get; set; }
     public ReplyMessageDto? ReplyMessage { get; set; }
     public List<MessageAttachmentDto>? Attachments { get; set; } = new();
+    public DateTime? EditedAt { get; set; }
     public List<MessageReactionDto>? Reactions { get; set; }
 }
