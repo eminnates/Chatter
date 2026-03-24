@@ -158,10 +158,13 @@ function App() {
       const { data } = await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${activeToken}` } })
       const userList = Array.isArray(data) ? data : (data.data || []);
 
-      // Keep previous lastMessage data to prevent "Say hello!" flashing while fetching new last messages
+      // Keep previous lastMessage data and unreadCount for selected user to prevent race conditions
+      const selectedId = selectedUserRef.current?.id;
       setUsers(prev => userList.map(u => {
         const existing = prev.find(p => p.id === u.id);
-        return existing ? { ...u, lastMessage: existing.lastMessage, lastMessageTime: existing.lastMessageTime } : u;
+        if (!existing) return u;
+        const isCurrentlySelected = selectedId && String(u.id) === String(selectedId);
+        return { ...u, lastMessage: existing.lastMessage, lastMessageTime: existing.lastMessageTime, unreadCount: isCurrentlySelected ? 0 : (existing.unreadCount ?? u.unreadCount) };
       }));
 
       const usersWithLastMessages = await Promise.all(userList.map(async (u) => {
@@ -204,7 +207,12 @@ function App() {
         return u;
       }));
 
-      setUsers(usersWithLastMessages);
+      setUsers(prev => usersWithLastMessages.map(u => {
+        const isCurrentlySelected = selectedId && String(u.id) === String(selectedId);
+        if (isCurrentlySelected) return { ...u, unreadCount: 0 };
+        const existing = prev.find(p => p.id === u.id);
+        return existing ? { ...u, unreadCount: existing.unreadCount ?? u.unreadCount } : u;
+      }));
     } catch (error) {
       console.error("Load users fatal error:", error);
       if (error.response?.status === 401) logout();
@@ -550,7 +558,7 @@ function App() {
             ...u,
             lastMessage: msg.content || '📎 Attachment',
             lastMessageTime: msg.sentAt,
-            unreadCount: isSelected || isSystemMsg ? (u.unreadCount || 0) : (u.unreadCount || 0) + 1
+            unreadCount: isSelected ? 0 : isSystemMsg ? (u.unreadCount || 0) : (u.unreadCount || 0) + 1
           };
         }
         return u;

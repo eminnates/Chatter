@@ -450,12 +450,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
           ${isSending ? 'opacity-70' : ''}
         `}>
 
-          {/* --- SENDER NAME (Group chats) --- */}
-          {!isSentByMe && msg.senderName && (
-            <div className="text-xs font-semibold text-accent-primary mb-1">
-              {msg.senderName}
-            </div>
-          )}
+          {/* --- SENDER NAME --- */}
+          <div className={`text-xs font-semibold mb-1 ${isSentByMe ? 'text-white/70' : 'text-accent-primary'}`}>
+            {isSentByMe ? 'You' : (msg.senderName || 'User')}
+          </div>
 
           {/* --- REPLY CONTEXT --- */}
           {replyData && (
