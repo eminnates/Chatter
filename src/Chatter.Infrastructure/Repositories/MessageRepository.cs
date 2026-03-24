@@ -160,6 +160,12 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
             .FirstOrDefaultAsync(r => r.MessageId == messageId && r.UserId == userId && r.Emoji == emoji, cancellationToken);
     }
 
+    public async Task<MessageReaction?> GetUserReactionAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Set<MessageReaction>()
+            .FirstOrDefaultAsync(r => r.MessageId == messageId && r.UserId == userId, cancellationToken);
+    }
+
     public async Task AddReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default)
     {
         await _context.Set<MessageReaction>().AddAsync(reaction, cancellationToken);

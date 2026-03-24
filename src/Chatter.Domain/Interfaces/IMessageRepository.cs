@@ -15,6 +15,7 @@ namespace Chatter.Domain.Interfaces
         Task<bool> CanUserEditMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
         Task<bool> CanUserDeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
         Task<MessageReaction?> GetReactionAsync(Guid messageId, Guid userId, string emoji, CancellationToken cancellationToken = default);
+        Task<MessageReaction?> GetUserReactionAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
         Task AddReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default);
         Task RemoveReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default);
     }

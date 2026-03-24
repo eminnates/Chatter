@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, memo, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search } from 'lucide-react';
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
@@ -598,22 +599,48 @@ const ChatWindow = ({
               <Ripple color="rgba(184, 212, 168, 0.2)" />
             </button>
             {showEmojiPicker && (
-              <div className="absolute bottom-full left-0 mb-4 z-50">
-                <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
-                  <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
-                    <EmojiPicker
-                      onEmojiClick={onChatEmojiClick}
-                      theme="dark"
-                      searchDisabled
-                      skinTonesDisabled
-                      previewConfig={{ showPreview: false }}
-                      width={300}
-                      height={350}
-                      lazyLoadEmojis
-                    />
-                  </Suspense>
+              isMobile ? createPortal(
+                <div 
+                  className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) setShowEmojiPicker(false);
+                    e.stopPropagation();
+                  }}
+                >
+                  <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
+                    <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
+                      <EmojiPicker
+                        onEmojiClick={(data) => { onChatEmojiClick(data); setShowEmojiPicker(false); }}
+                        theme="dark"
+                        searchDisabled
+                        skinTonesDisabled
+                        previewConfig={{ showPreview: false }}
+                        width={Math.min(350, window.innerWidth - 32)}
+                        height={400}
+                        lazyLoadEmojis
+                      />
+                    </Suspense>
+                  </div>
+                </div>,
+                document.body
+              ) : (
+                <div className="absolute bottom-full left-0 mb-4 z-50">
+                  <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
+                    <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
+                      <EmojiPicker
+                        onEmojiClick={onChatEmojiClick}
+                        theme="dark"
+                        searchDisabled
+                        skinTonesDisabled
+                        previewConfig={{ showPreview: false }}
+                        width={300}
+                        height={350}
+                        lazyLoadEmojis
+                      />
+                    </Suspense>
+                  </div>
                 </div>
-              </div>
+              )
             )}
           </div>
 

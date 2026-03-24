@@ -399,10 +399,16 @@ public class ChatService : IChatService
         if (message == null)
             return Result<MessageReactionDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
 
-        // Aynı emoji zaten varsa değiştirme
-        var existing = await _unitOfWork.Messages.GetReactionAsync(messageId, userId, emoji);
+        var existing = await _unitOfWork.Messages.GetUserReactionAsync(messageId, userId);
         if (existing != null)
+        {
+            if (existing.Emoji == emoji) 
+                return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
+            
+            existing.Emoji = emoji;
+            await _unitOfWork.SaveChangesAsync();
             return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
+        }
 
         var reaction = new MessageReaction
         {

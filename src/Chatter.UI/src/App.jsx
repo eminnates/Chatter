@@ -573,11 +573,9 @@ function App() {
       setMessages(prev => prev.map(m => {
         if (String(m.id) !== String(messageId)) return m;
         const existing = (m.reactions || []);
-        const alreadyExists = existing.some(r =>
-          String(r.userId) === String(userId) && r.emoji === emoji
-        );
-        if (alreadyExists) return m;
-        return { ...m, reactions: [...existing, { userId, emoji }] };
+        // Remove any previous reaction by this user on this message
+        const withoutUser = existing.filter(r => String(r.userId) !== String(userId));
+        return { ...m, reactions: [...withoutUser, { userId, emoji }] };
       }));
     });
 

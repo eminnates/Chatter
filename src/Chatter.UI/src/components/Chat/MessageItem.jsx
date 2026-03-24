@@ -310,17 +310,22 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
         {/* --- EMOJI PICKER POPUP --- */}
         {showEmojiPicker && pickerCoords && createPortal(
           <div
-            ref={emojiPickerRef}
-            className="fixed z-[9999]"
-            style={{ 
-              top: Math.max(10, pickerCoords.top - (isMobile ? 310 : 360)) + 'px', 
+            className={isMobile ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" : "fixed z-[9999]"}
+            style={isMobile ? {} : { 
+              top: Math.max(10, pickerCoords.top - 360) + 'px', 
               left: isSentByMe ? Math.max(10, pickerCoords.left - 300) + 'px' : Math.max(10, pickerCoords.left) + 'px',
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              if (isMobile && e.target === e.currentTarget) {
+                setShowEmojiPicker(false);
+              }
+              e.stopPropagation();
+            }}
           >
-            <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl border border-border shadow-2xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
-              <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in origin-bottom">
-                <EmojiPicker
+            <div ref={emojiPickerRef}>
+              <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl border border-border shadow-2xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
+                <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
+                  <EmojiPicker
                   onEmojiClick={handleEmojiSelect}
                   width={isMobile ? Math.min(300, window.innerWidth - 20) : 300}
                   height={isMobile ? 300 : 350}
@@ -332,6 +337,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                 />
               </div>
             </Suspense>
+            </div>
           </div>,
           document.body
         )}
