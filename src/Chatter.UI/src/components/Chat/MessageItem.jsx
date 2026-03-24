@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import { memo, useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply, Copy, Loader2, AlertCircle, Smile, Pencil } from 'lucide-react';
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
 import SecureImage from '../Common/SecureImage';
@@ -10,6 +11,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pickerCoords, setPickerCoords] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isLongPressing, setIsLongPressing] = useState(false);
@@ -253,8 +255,17 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
 
           {/* Emoji reaction button */}
           <button
-            onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
-            className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all"
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (!showEmojiPicker) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setPickerCoords({ top: rect.top, left: rect.left });
+                setShowEmojiPicker(true);
+              } else {
+                setShowEmojiPicker(false);
+              }
+            }}
+            className={`p-2 rounded-full bg-bg-card border border-border shadow-sm hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all ${showEmojiPicker ? 'text-yellow-500 bg-yellow-500/10' : 'text-text-muted'}`}
             title="React"
             aria-label="Add reaction"
           >
@@ -297,25 +308,32 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
         )}
 
         {/* --- EMOJI PICKER POPUP --- */}
-        {showEmojiPicker && (
+        {showEmojiPicker && pickerCoords && createPortal(
           <div
             ref={emojiPickerRef}
-            className={`absolute z-50 ${isSentByMe ? 'right-0' : 'left-0'} bottom-full mb-2`}
+            className="fixed z-[9999]"
+            style={{ 
+              top: Math.max(10, pickerCoords.top - (isMobile ? 310 : 360)) + 'px', 
+              left: isSentByMe ? Math.max(10, pickerCoords.left - 300) + 'px' : Math.max(10, pickerCoords.left) + 'px',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
-            <EmojiPicker
-              onEmojiClick={handleEmojiSelect}
-              width={isMobile ? Math.min(300, window.innerWidth - 40) : 300}
-              height={isMobile ? 300 : 350}
-              searchDisabled={isMobile}
-              skinTonesDisabled
-              previewConfig={{ showPreview: false }}
-              theme="dark"
-              lazyLoadEmojis
-            />
+            <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl border border-border shadow-2xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
+              <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in origin-bottom">
+                <EmojiPicker
+                  onEmojiClick={handleEmojiSelect}
+                  width={isMobile ? Math.min(300, window.innerWidth - 20) : 300}
+                  height={isMobile ? 300 : 350}
+                  searchDisabled={isMobile}
+                  skinTonesDisabled
+                  previewConfig={{ showPreview: false }}
+                  theme="dark"
+                  lazyLoadEmojis
+                />
+              </div>
             </Suspense>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* --- MESSAGE BUBBLE --- */}
