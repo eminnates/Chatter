@@ -310,6 +310,15 @@ function App() {
     usersRef.current = users;
   }, [connection, token, lightboxImage, isMobileSidebarOpen, showProfilePage, selectedUser, user, users]);
 
+  // Sync selectedUser with users array (e.g. when online status changes)
+  useEffect(() => {
+    if (!selectedUser) return;
+    const updated = users.find(u => String(u.id) === String(selectedUser.id));
+    if (updated && (updated.isOnline !== selectedUser.isOnline || updated.fullName !== selectedUser.fullName)) {
+      setSelectedUser(prev => ({ ...prev, ...updated }));
+    }
+  }, [users]);
+
   useEffect(() => {
     const init = async () => {
       if (Capacitor.isNativePlatform()) {

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, memo, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, memo, useCallback, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search } from 'lucide-react';
+import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search, ChevronDown } from 'lucide-react';
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
 import { Virtuoso } from 'react-virtuoso';
@@ -38,7 +38,7 @@ const ChatWindow = ({
   isSearching,
   onRetryMessage
 }) => {
-  const messagesEndRef = useRef(null);
+  const virtuosoRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -46,6 +46,7 @@ const ChatWindow = ({
   const isNearBottomRef = useRef(true);
   const [showConnectionWarning, setShowConnectionWarning] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -72,29 +73,33 @@ const ChatWindow = ({
   // ============================================
   // SCROLL MANAGEMENT - Smart auto-scroll
   // ============================================
+  const scrollToBottom = useCallback((behavior = 'smooth') => {
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior });
+  }, []);
+
   // Kullanıcının scroll pozisyonunu takip et
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const threshold = 150; // px
-    isNearBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    isNearBottomRef.current = isNearBottom;
+    setShowScrollToBottom(!isNearBottom);
   }, []);
 
-  // Sadece alta yakınsa veya kendi mesajımızsa scroll et
+  // Sadece alta yakınsa scroll et
   useEffect(() => {
     if (isNearBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom();
     }
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  // Dosya/Reply secildiginde scroll (DOM guncellensin diye delay)
+  // Dosya/Reply secildiginde scroll
   useEffect(() => {
     if (selectedFile || replyingTo) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      setTimeout(() => scrollToBottom(), 100);
     }
-  }, [selectedFile, replyingTo]);
+  }, [selectedFile, replyingTo, scrollToBottom]);
 
   // ============================================
   // AUTO FOCUS - Input'a otomatik odaklan
@@ -112,7 +117,7 @@ const ChatWindow = ({
     if (!isMobile) return;
     const onResize = () => {
       // visualViewport shrinks when keyboard appears
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setTimeout(() => scrollToBottom(), 100);
     };
     window.visualViewport?.addEventListener('resize', onResize);
     return () => window.visualViewport?.removeEventListener('resize', onResize);
@@ -175,6 +180,37 @@ const ChatWindow = ({
 
   // Determine which messages to display
   const displayMessages = showSearch && searchQuery.trim() && searchResults ? searchResults : messages;
+
+  // Date separator helper
+  const formatDateLabel = (date) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.round((today - msgDay) / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (date.getFullYear() === now.getFullYear()) {
+      return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long' });
+    }
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  // Inject date separators between messages from different days
+  const messagesWithDates = useMemo(() => {
+    const result = [];
+    let lastDateStr = null;
+    for (const msg of displayMessages) {
+      if (msg.sentAt) {
+        const dateStr = new Date(msg.sentAt).toDateString();
+        if (dateStr !== lastDateStr) {
+          result.push({ _type: 'date-separator', _date: new Date(msg.sentAt), _key: `sep-${dateStr}` });
+          lastDateStr = dateStr;
+        }
+      }
+      result.push(msg);
+    }
+    return result;
+  }, [displayMessages]);
 
   // ============================================
   // EMPTY STATE
@@ -341,7 +377,7 @@ const ChatWindow = ({
         id="chat-messages-area"
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent"
+        className="relative flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent"
       >
         {/* Loading Skeleton */}
         {isLoadingMessages ? (
@@ -393,23 +429,35 @@ const ChatWindow = ({
         ) : (
           /* Messages List */
           <Virtuoso
+            ref={virtuosoRef}
             style={{ height: '100%', width: '100%' }}
-            data={displayMessages}
-            initialTopMostItemIndex={displayMessages.length - 1}
-            itemContent={(index, msg) => (
-              <MessageItem
-                key={msg.id || `temp-${index}`}
-                msg={msg}
-                currentUserId={currentUserId}
-                onImageClick={onImageClick}
-                onReply={setReplyingTo}
-                onEdit={onEditMessage}
-                onAddReaction={onAddReaction}
-                onRemoveReaction={onRemoveReaction}
-                onRetry={onRetryMessage}
-                isMobile={isMobile}
-              />
-            )}
+            data={messagesWithDates}
+            initialTopMostItemIndex={messagesWithDates.length - 1}
+            itemContent={(index, item) => {
+              if (item._type === 'date-separator') {
+                return (
+                  <div className="flex items-center justify-center my-3">
+                    <div className="px-3 py-1 rounded-full bg-bg-card text-text-muted text-xs font-medium border border-border-subtle shadow-soft">
+                      {formatDateLabel(item._date)}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <MessageItem
+                  key={item.id || `temp-${index}`}
+                  msg={item}
+                  currentUserId={currentUserId}
+                  onImageClick={onImageClick}
+                  onReply={setReplyingTo}
+                  onEdit={onEditMessage}
+                  onAddReaction={onAddReaction}
+                  onRemoveReaction={onRemoveReaction}
+                  onRetry={onRetryMessage}
+                  isMobile={isMobile}
+                />
+              );
+            }}
             followOutput="auto"
           />
         )}
@@ -426,8 +474,16 @@ const ChatWindow = ({
           </div>
         )}
 
-        {/* Scroll Anchor */}
-        <div ref={messagesEndRef} className="h-2" />
+        {/* Scroll to Bottom Button */}
+        {showScrollToBottom && !isLoadingMessages && displayMessages.length > 0 && (
+          <button
+            onClick={() => scrollToBottom()}
+            className="sticky bottom-2 left-1/2 -translate-x-1/2 z-10 w-8 h-8 rounded-full bg-bg-card border border-border-subtle shadow-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-bg-hover transition-all animate-fade-in"
+            aria-label="Scroll to bottom"
+          >
+            <ChevronDown size={18} />
+          </button>
+        )}
       </div>
 
       {/* ============================================ */}

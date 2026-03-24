@@ -334,7 +334,8 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                       >
                         <Smile size={14} />
                       </button>
-                      <button
+                      {isSentByMe && msg.content && (
+                        <button
                           onClick={handleStartEdit}
                           className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-blue-500 hover:bg-blue-500/10 hover:scale-110 active:scale-95 transition-all"
                           title="Edit"
@@ -342,6 +343,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                         >
                           <Pencil size={14} />
                         </button>
+                      )}
                       <button
                         onClick={handleCopy}
                         className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-green-500 hover:bg-green-500/10 hover:scale-110 active:scale-95 transition-all"
