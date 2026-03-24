@@ -9,7 +9,7 @@ public class FilesController : BaseApiController
 {
     private readonly IWebHostEnvironment _env;
     // İzin verilen dosya uzantıları (Güvenlik için)
-    private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".zip", ".mp3", ".mp4" };
+    private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".docx", ".zip", ".mp3", ".mp4" };
     // Maksimum dosya boyutu (Örn: 10MB)
     private const long MaxFileSize = 10 * 1024 * 1024;
 
@@ -118,6 +118,7 @@ public class FilesController : BaseApiController
                 ".jpg" or ".jpeg" => "image/jpeg",
                 ".png" => "image/png",
                 ".gif" => "image/gif",
+                ".webp" => "image/webp",
                 ".pdf" => "application/pdf",
                 ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 ".zip" => "application/zip",

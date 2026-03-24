@@ -176,7 +176,8 @@ public class ChatService : IChatService
                 Attachments = message.Attachments.Select(a => new MessageAttachmentDto {
                     FileName = a.FileName,
                     FileUrl = a.FileUrl,
-                    Type = a.Type.ToString()
+                    Type = a.Type.ToString(),
+                    FileSize = a.FileSize
                 }).ToList()
             };
 
@@ -220,7 +221,8 @@ public class ChatService : IChatService
             Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
                 FileUrl = a.FileUrl,
                 FileName = a.FileName,
-                Type = a.Type.ToString()
+                Type = a.Type.ToString(),
+                FileSize = a.FileSize
             }).ToList(),
             Reactions = m.Reactions?.Select(r => new MessageReactionDto
             {

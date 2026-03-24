@@ -487,6 +487,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
             const isImage = att.type === 1 ||
                           att.type === 'Image' ||
                           (att.fileName && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(att.fileName));
+            const isVideo = !isImage && (
+                          att.type === 2 ||
+                          att.type === 'Video' ||
+                          (att.fileName && /\.(mp4|webm|mov|avi)$/i.test(att.fileName)));
 
             return (
               <div key={att.id || index} className={msg.content ? "mb-2.5" : "mb-0"}>
@@ -510,6 +514,19 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                       </span>
                       <Maximize2 size={20} className="text-white drop-shadow-lg flex-shrink-0" />
                     </div>
+                  </div>
+
+                ) : isVideo ? (
+
+                  // --- VIDEO ATTACHMENT ---
+                  <div className="relative overflow-hidden rounded-xl border border-border-subtle">
+                    <video
+                      src={`${BACKEND_URL}${att.fileUrl}`}
+                      controls
+                      preload="metadata"
+                      className="w-full max-h-[300px] rounded-xl bg-black"
+                      playsInline
+                    />
                   </div>
 
                 ) : (

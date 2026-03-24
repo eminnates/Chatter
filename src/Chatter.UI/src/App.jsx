@@ -802,7 +802,10 @@ function App() {
         attachmentData = {
           fileName: res.data.fileName,
           fileUrl: res.data.url,
-          type: selectedFile.type.startsWith('image/') ? 1 : 4
+          type: selectedFile.type.startsWith('image/') ? 1
+              : selectedFile.type.startsWith('video/') ? 2
+              : 4,
+          fileSize: res.data.fileSize
         };
         setIsUploading(false);
         setUploadProgress(0);
