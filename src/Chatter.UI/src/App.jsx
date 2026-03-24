@@ -254,6 +254,7 @@ function App() {
   // === ACTIONS ===
   const handleSelectUser = useCallback((u) => {
     setSelectedUser(u);
+    setMessages([]);
     setIsTyping(false);
     setReplyingTo(null);
     setSearchResults(null);
