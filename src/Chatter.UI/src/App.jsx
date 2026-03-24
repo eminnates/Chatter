@@ -456,8 +456,27 @@ function App() {
 
     newConnection.onclose(() => setConnectionStatus('disconnected'));
 
-    newConnection.on('ReceiveMessage', (msg) => {
-      const senderId = msg.senderId || msg.SenderId;
+    newConnection.on('ReceiveMessage', (rawMsg) => {
+      // Normalize MessagePack's PascalCase to camelCase
+      const msg = {
+        ...rawMsg,
+        id: rawMsg.id || rawMsg.Id,
+        conversationId: rawMsg.conversationId || rawMsg.ConversationId,
+        senderId: rawMsg.senderId || rawMsg.SenderId,
+        senderName: rawMsg.senderName || rawMsg.SenderName,
+        content: rawMsg.content || rawMsg.Content || '',
+        type: rawMsg.type || rawMsg.Type,
+        sentAt: rawMsg.sentAt || rawMsg.SentAt,
+        isRead: rawMsg.isRead !== undefined ? rawMsg.isRead : (rawMsg.IsRead || false),
+        replyToMessageId: rawMsg.replyToMessageId || rawMsg.ReplyToMessageId,
+        replyMessage: rawMsg.replyMessage || rawMsg.ReplyMessage,
+        attachments: rawMsg.attachments || rawMsg.Attachments || [],
+        reactions: rawMsg.reactions || rawMsg.Reactions || [],
+        error: rawMsg.error || rawMsg.Error || false,
+        sending: rawMsg.sending || rawMsg.Sending || false
+      };
+
+      const senderId = msg.senderId;
       const myId = getSafeUserId(userRef.current);
       const isMyMsg = String(senderId) === String(myId);
       const isSelected = String(senderId) === String(selectedUserRef.current?.id);
@@ -465,7 +484,7 @@ function App() {
       if (isMyMsg) {
         // Optimistik mesajı backend'den dönen gerçek mesajla değiştir
         setMessages(prev => {
-          const msgId = msg.id || msg.Id;
+          const msgId = msg.id;
           const tempIdx = prev.findIndex(m =>
             typeof m.id === 'number' && m.content === msg.content && String(m.senderId) === String(myId)
           );
@@ -495,7 +514,7 @@ function App() {
       if (isSelected) {
         setMessages(prev => {
           // Deduplication: eğer bu mesaj zaten varsa ekleme
-          const msgId = msg.id || msg.Id;
+          const msgId = msg.id;
           if (msgId && prev.some(m => String(m.id) === String(msgId))) return prev;
           // Optimistik mesajla eşleştir: aynı content + yakın zaman
           const tempIdx = prev.findIndex(m =>
@@ -509,20 +528,25 @@ function App() {
           }
           return [...prev, msg];
         });
-        playSound('messageReceived');
+        if (msg.type !== 'System' && String(msg.type) !== '2') {
+          playSound('messageReceived');
+        }
         markAsRead(senderId);
       } else {
-        playSound('notification');
-        showNotification(senderId, msg.senderName, msg.content);
+        if (msg.type !== 'System' && String(msg.type) !== '2') {
+          playSound('notification');
+          showNotification(senderId, msg.senderName, msg.content);
+        }
       }
 
       setUsers(prev => prev.map(u => {
         if (u.id === senderId) {
+          const isSystemMsg = msg.type === 'System' || String(msg.type) === '2';
           return {
             ...u,
             lastMessage: msg.content || '📎 Attachment',
             lastMessageTime: msg.sentAt,
-            unreadCount: isSelected ? 0 : (u.unreadCount || 0) + 1
+            unreadCount: isSelected || isSystemMsg ? (u.unreadCount || 0) : (u.unreadCount || 0) + 1
           };
         }
         return u;

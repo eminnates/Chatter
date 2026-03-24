@@ -106,7 +106,7 @@ public class UserRepository : GenericRepository<AppUser, Guid>, IUserRepository
                                 c.Participants.Any(p => p.UserId == u.Id))
                     .Select(c => new
                     {
-                        UnreadCount = c.Messages.Count(m => m.SenderId == u.Id && m.Status != MessageStatus.Read),
+                        UnreadCount = c.Messages.Count(m => m.SenderId == u.Id && m.Status != MessageStatus.Read && m.Type != MessageType.System),
                         LastMessageAt = c.Messages.OrderByDescending(m => m.SentAt)
                                                   .Select(m => (DateTime?)m.SentAt)
                                                   .FirstOrDefault()
