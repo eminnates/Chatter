@@ -125,8 +125,11 @@ builder.Services.AddCors(options =>
                 // Log the origin for debugging
                 Console.WriteLine($"🔍 CORS request from origin: {origin}");
                 
-                if (origin.StartsWith("http://localhost") || 
+                if (origin.StartsWith("http://localhost") ||
                     origin.StartsWith("https://localhost") ||
+                    origin.StartsWith("http://tauri.localhost") ||
+                    origin.StartsWith("https://tauri.localhost") ||
+                    origin == "tauri://localhost" ||
                     origin.StartsWith("capacitor://") ||
                     origin.StartsWith("ionic://") ||
                     origin.StartsWith("http://192.168.") ||
