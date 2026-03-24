@@ -523,91 +523,95 @@ const ChatWindow = ({
         )}
 
         {/* Input Container */}
-        <div className="flex items-end gap-2" ref={emojiPickerRef}>
-          {/* Hidden File Input */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*,video/*,.pdf,.doc,.docx"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-            aria-label="File upload"
-          />
+        <div className="flex flex-row items-end justify-between w-full h-auto gap-1 sm:gap-2" ref={emojiPickerRef}>
+          
+          {/* LEFT COMMANDS CONTAINER (Attach & Emoji) */}
+          <div className="flex flex-row items-end justify-start gap-1 shrink-0 mb-[6px]">
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*,video/*,.pdf,.doc,.docx"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              aria-label="File upload"
+            />
 
-          {/* Attach Button */}
-          <button
-            type="button"
-            className="relative p-3 rounded-2xl text-text-muted hover:text-accent-primary hover:bg-accent-light transition-all active:scale-95 ripple-container flex-shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading || connectionStatus !== 'connected'}
-            title="Attach File"
-            aria-label="Attach file"
-          >
-            <Paperclip size={20} />
-            <Ripple color="rgba(184, 212, 168, 0.2)" />
-          </button>
-
-          {/* Emoji Button */}
-          <div className="relative flex-shrink-0">
+            {/* Attach Button */}
             <button
               type="button"
-              className={`relative p-3 rounded-2xl text-text-muted hover:text-accent-primary hover:bg-accent-light transition-all active:scale-95 ripple-container ${showEmojiPicker ? 'text-accent-primary bg-accent-light' : ''}`}
-              onClick={(e) => { e.preventDefault(); setShowEmojiPicker(p => !p); }}
-              disabled={connectionStatus !== 'connected'}
-              title="Add Emoji"
-              aria-label="Add emoji"
+              className="relative flex items-center justify-center h-[44px] w-[36px] sm:w-[44px] sm:rounded-2xl rounded-xl text-text-muted hover:text-accent-primary hover:bg-accent-light transition-all active:scale-95 ripple-container flex-shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || connectionStatus !== 'connected'}
+              title="Attach File"
+              aria-label="Attach file"
             >
-              <Smile size={20} />
+              <Paperclip size={20} />
               <Ripple color="rgba(184, 212, 168, 0.2)" />
             </button>
-            {showEmojiPicker && (
-              isMobile ? createPortal(
-                <div 
-                  className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget) setShowEmojiPicker(false);
-                    e.stopPropagation();
-                  }}
-                >
-                  <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
-                    <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
-                      <EmojiPicker
-                        onEmojiClick={(data) => { onChatEmojiClick(data); setShowEmojiPicker(false); }}
-                        theme="dark"
-                        searchDisabled
-                        skinTonesDisabled
-                        previewConfig={{ showPreview: false }}
-                        width={Math.min(350, window.innerWidth - 32)}
-                        height={400}
-                        lazyLoadEmojis
-                      />
-                    </Suspense>
+
+            {/* Emoji Button */}
+            <div className="relative flex-shrink-0">
+              <button
+                type="button"
+                className={`relative flex items-center justify-center h-[44px] w-[36px] sm:w-[44px] sm:rounded-2xl rounded-xl text-text-muted hover:text-accent-primary hover:bg-accent-light transition-all active:scale-95 ripple-container ${showEmojiPicker ? 'text-accent-primary bg-accent-light' : ''}`}
+                onClick={(e) => { e.preventDefault(); setShowEmojiPicker(p => !p); }}
+                disabled={connectionStatus !== 'connected'}
+                title="Add Emoji"
+                aria-label="Add emoji"
+              >
+                <Smile size={20} />
+                <Ripple color="rgba(184, 212, 168, 0.2)" />
+              </button>
+              {showEmojiPicker && (
+                isMobile ? createPortal(
+                  <div 
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) setShowEmojiPicker(false);
+                      e.stopPropagation();
+                    }}
+                  >
+                    <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
+                      <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
+                        <EmojiPicker
+                          onEmojiClick={(data) => { onChatEmojiClick(data); setShowEmojiPicker(false); }}
+                          theme="dark"
+                          searchDisabled
+                          skinTonesDisabled
+                          previewConfig={{ showPreview: false }}
+                          width={Math.min(350, window.innerWidth - 32)}
+                          height={400}
+                          lazyLoadEmojis
+                        />
+                      </Suspense>
+                    </div>
+                  </div>,
+                  document.body
+                ) : (
+                  <div className="absolute bottom-full left-0 mb-4 z-50">
+                    <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
+                      <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
+                        <EmojiPicker
+                          onEmojiClick={onChatEmojiClick}
+                          theme="dark"
+                          searchDisabled
+                          skinTonesDisabled
+                          previewConfig={{ showPreview: false }}
+                          width={300}
+                          height={350}
+                          lazyLoadEmojis
+                        />
+                      </Suspense>
+                    </div>
                   </div>
-                </div>,
-                document.body
-              ) : (
-                <div className="absolute bottom-full left-0 mb-4 z-50">
-                  <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
-                    <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
-                      <EmojiPicker
-                        onEmojiClick={onChatEmojiClick}
-                        theme="dark"
-                        searchDisabled
-                        skinTonesDisabled
-                        previewConfig={{ showPreview: false }}
-                        width={300}
-                        height={350}
-                        lazyLoadEmojis
-                      />
-                    </Suspense>
-                  </div>
-                </div>
-              )
-            )}
+                )
+              )}
+            </div>
           </div>
 
-          {/* Message Input */}
-          <div className="flex-1 bg-bg-card border-2 border-border-subtle rounded-2xl focus-within:border-accent-primary transition-all shadow-soft">
+          {/* CENTER TEXTAREA */}
+          <div className="flex-1 min-w-[50px] max-w-full bg-bg-card border-2 border-border-subtle rounded-2xl focus-within:border-accent-primary transition-all shadow-soft">
             <textarea
               ref={messageInputRef}
               value={messageInput}
@@ -621,26 +625,28 @@ const ChatWindow = ({
               placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
               disabled={connectionStatus !== 'connected'}
               rows={1}
-              className="w-full px-4 py-3 bg-transparent text-text-main placeholder-text-muted/60 outline-none resize-none max-h-32 min-h-[48px] scrollbar-thin scrollbar-thumb-bg-hover scrollbar-track-transparent"
+              className="w-full px-3 py-3 sm:px-4 bg-transparent text-text-main placeholder-text-muted/60 outline-none resize-none max-h-32 min-h-[48px] scrollbar-thin scrollbar-thumb-bg-hover scrollbar-track-transparent text-sm sm:text-base"
               aria-label="Message input"
             />
           </div>
 
-          {/* Send Button */}
-          <button
-            type="submit"
-            disabled={connectionStatus !== 'connected' || (!messageInput.trim() && !selectedFile) || isUploading}
-            className="relative p-3 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary text-white shadow-soft hover:shadow-glow hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none transition-all flex items-center justify-center flex-shrink-0 ripple-container"
-            title="Send message"
-            aria-label="Send message"
-          >
-            {connectionStatus === 'connecting' || isUploading ? (
-              <Loader2 size={20} className="animate-spin" />
-            ) : (
-              <Send size={20} />
-            )}
-            <Ripple color="rgba(255, 255, 255, 0.3)" />
-          </button>
+          {/* RIGHT COMMAND CONTAINER (Send) */}
+          <div className="flex flex-row items-end justify-end shrink-0 mb-[6px]">
+            <button
+              type="submit"
+              disabled={connectionStatus !== 'connected' || (!messageInput.trim() && !selectedFile) || isUploading}
+              className="relative flex items-center justify-center h-[44px] w-[40px] sm:w-[44px] sm:rounded-2xl rounded-xl bg-gradient-to-br from-accent-primary to-accent-secondary text-white shadow-soft hover:shadow-glow hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none transition-all flex-shrink-0 ripple-container"
+              title="Send message"
+              aria-label="Send message"
+            >
+              {connectionStatus === 'connecting' || isUploading ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Send size={20} />
+              )}
+              <Ripple color="rgba(255, 255, 255, 0.3)" />
+            </button>
+          </div>
         </div>
       </form>
     </div>

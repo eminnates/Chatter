@@ -8,7 +8,6 @@ import { BACKEND_URL } from '../../config/constants';
 
 const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, onAddReaction, onRemoveReaction, onRetry, isMobile }) => {
   const [showMobileActions, setShowMobileActions] = useState(false);
-  const [showContextMenu, setShowContextMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pickerCoords, setPickerCoords] = useState(null);
@@ -18,6 +17,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartXRef = useRef(0);
   const longPressTimer = useRef(null);
+  const hasLongPressedRef = useRef(false);
   const emojiPickerRef = useRef(null);
   const editInputRef = useRef(null);
 
@@ -77,17 +77,17 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     if (!isMobile) return;
     touchStartXRef.current = e.touches[0].clientX;
     setSwipeOffset(0);
+    hasLongPressedRef.current = false;
 
     setIsLongPressing(true);
     longPressTimer.current = setTimeout(() => {
-      setShowContextMenu(true);
-      setShowMobileActions(true);
+      setShowMobileActions(prev => !prev);
       setIsLongPressing(false);
-      // Haptic feedback if available
+      hasLongPressedRef.current = true;
       if (window.navigator?.vibrate) {
         window.navigator.vibrate(50);
       }
-    }, 500);
+    }, 350);
   };
 
   const handleTouchMove = (e) => {
@@ -96,23 +96,17 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     const currentX = e.touches[0].clientX;
     const diffX = currentX - touchStartXRef.current;
 
+    if (Math.abs(diffX) > 10 && longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+      setIsLongPressing(false);
+    }
+
     // Swiping right to reply (positive X)
     if (diffX > 0) {
-      if (Math.abs(diffX) > 10 && longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-        setIsLongPressing(false);
-      }
-      
       const maxSwipe = 70;
       const dampedOffset = Math.min(maxSwipe, diffX * 0.4);
       setSwipeOffset(dampedOffset);
-    } else {
-      if (Math.abs(diffX) > 10 && longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-        setIsLongPressing(false);
-      }
     }
   };
 
@@ -131,18 +125,30 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
         window.navigator.vibrate(50);
       }
     }
-    
+
     setSwipeOffset(0);
   };
 
-  // Close mobile actions on outside click
+  // Close mobile actions on outside touch
   useEffect(() => {
     if (!showMobileActions) return;
 
-    const handleClickOutside = () => setShowMobileActions(false);
-    document.addEventListener('click', handleClickOutside);
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-mobile-actions]')) {
+        setShowMobileActions(false);
+      }
+    };
 
-    return () => document.removeEventListener('click', handleClickOutside);
+    const timer = setTimeout(() => {
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('click', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
+    };
   }, [showMobileActions]);
 
   // Close emoji picker on outside click
@@ -259,15 +265,27 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     <div className={`
       flex flex-col mb-3 w-full animate-slide-up group/message relative
       ${isSentByMe ? 'items-end' : 'items-start'}
+      ${showMobileActions ? 'z-[99]' : 'z-0'}
     `}>
 
       {/* --- MESSAGE WRAPPER --- */}
       <div
-        className="relative flex items-center max-w-[85%] md:max-w-[70%] lg:max-w-[600px]"
+        className={`relative flex items-center max-w-[85%] md:max-w-[70%] lg:max-w-[600px] ${showMobileActions ? 'z-[100]' : ''}`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         onTouchMove={handleTouchMove}
-        style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeOffset ? 'none' : 'transform 0.2s ease' }}
+        onContextMenu={(e) => {
+          if (isMobile) {
+            e.preventDefault();
+          }
+        }}
+        style={{ 
+          transform: `translateX(${swipeOffset}px)`, 
+          transition: swipeOffset ? 'none' : 'transform 0.2s ease',
+          WebkitTouchCallout: isMobile ? 'none' : 'auto',
+          userSelect: isMobile ? 'none' : 'auto'
+        }}
       >
         {/* Reply Icon Indicator while swiping */}
         {isMobile && swipeOffset > 20 && (
@@ -282,77 +300,104 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
           </div>
         )}
 
-        {/* --- ACTION BUTTONS (Desktop Hover / Mobile Long-press) --- */}
-        <div className={`
-          absolute flex flex-row items-center gap-1 z-[100]
-          ${isSentByMe 
-            ? (isMobile ? 'right-0 -top-12 bg-bg-card p-1.5 rounded-full shadow-lg border border-border/50' : '-left-24 sm:-left-36') 
-            : (isMobile ? 'left-0 -top-12 bg-bg-card p-1.5 rounded-full shadow-lg border border-border/50' : '-right-24 sm:-right-36')
-          }
-          ${isMobile
-            ? (showMobileActions ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none')
-            : 'opacity-0 group-hover/message:opacity-100 pointer-events-none group-hover/message:pointer-events-auto'
-          }
-          transition-all duration-200
-        `}>
-          <button
-            onClick={handleReply}
-            className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-accent-primary hover:bg-accent-light hover:scale-110 active:scale-95 transition-all"
-            title="Reply"
-            aria-label="Reply to message"
-          >
-            <Reply size={14} />
-          </button>
+        {/* --- ACTION BUTTONS --- */}
+        {!isMobile && (
+          <div 
+            onClick={e => e.stopPropagation()}
+            className={`
+            absolute flex flex-row items-center gap-1 z-[100] transition-all duration-200
+            ${isSentByMe ? '-left-[120px] sm:-left-36' : '-right-[120px] sm:-right-36'}
+            opacity-0 scale-95 group-hover/message:opacity-100 group-hover/message:scale-100 pointer-events-none group-hover/message:pointer-events-auto
+          `}>
+            <button
+                        onClick={handleReply}
+                        className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-accent-primary hover:bg-accent-light hover:scale-110 active:scale-95 transition-all"
+                        title="Reply"
+                        aria-label="Reply to message"
+                      >
+                        <Reply size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (!showEmojiPicker) {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setPickerCoords({ top: rect.top, left: rect.left });
+                            setShowEmojiPicker(true);
+                          } else {
+                            setShowEmojiPicker(false);
+                          }
+                        }}
+                        className={`p-2 rounded-full bg-bg-card border border-border shadow-sm hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all ${showEmojiPicker ? 'text-yellow-500 bg-yellow-500/10' : 'text-text-muted'}`}
+                        title="React"
+                        aria-label="Add reaction"
+                      >
+                        <Smile size={14} />
+                      </button>
+                      <button
+                          onClick={handleStartEdit}
+                          className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-blue-500 hover:bg-blue-500/10 hover:scale-110 active:scale-95 transition-all"
+                          title="Edit"
+                          aria-label="Edit message"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      <button
+                        onClick={handleCopy}
+                        className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-green-500 hover:bg-green-500/10 hover:scale-110 active:scale-95 transition-all"
+                        title="Copy"
+                        aria-label="Copy message"
+                      >
+                        {copied ? <CheckCheck size={14} className="text-green-500" /> : <Copy size={14} />}
+                      </button>
+          </div>
+        )}
 
-          {/* Emoji reaction button */}
-          <button
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (!showEmojiPicker) {
+        {/* MOBILE INLINE ACTIONS (next to message) */}
+        {isMobile && showMobileActions && (
+          <div
+            data-mobile-actions
+            className={`
+              absolute flex items-center gap-1 z-[100] animate-scale-in
+              ${isSentByMe ? 'right-full mr-1.5' : 'left-full ml-1.5'}
+            `}
+            onClick={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { handleReply(); setShowMobileActions(false); }}
+              className="p-2 rounded-full bg-bg-card border border-border shadow-soft text-text-muted active:scale-90 active:bg-accent-light transition-all"
+              aria-label="Reply"
+            >
+              <Reply size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
                 setPickerCoords({ top: rect.top, left: rect.left });
                 setShowEmojiPicker(true);
-              } else {
-                setShowEmojiPicker(false);
-              }
-            }}
-            className={`p-2 rounded-full bg-bg-card border border-border shadow-sm hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all ${showEmojiPicker ? 'text-yellow-500 bg-yellow-500/10' : 'text-text-muted'}`}
-            title="React"
-            aria-label="Add reaction"
-          >
-            <Smile size={14} />
-          </button>
-
-          {/* Edit button (only for own text messages) */}
-          {isSentByMe && msg.content && (
-            <button
-              onClick={handleStartEdit}
-              className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-blue-500 hover:bg-blue-500/10 hover:scale-110 active:scale-95 transition-all"
-              title="Edit"
-              aria-label="Edit message"
+                setShowMobileActions(false);
+              }}
+              className="p-2 rounded-full bg-bg-card border border-border shadow-soft text-text-muted active:scale-90 active:bg-yellow-500/10 transition-all"
+              aria-label="React"
             >
-              <Pencil size={14} />
+              <Smile size={16} />
             </button>
-          )}
-        </div>
-
-        {/* --- MORE ACTIONS (Mobile - Copy) --- */}
-        {isMobile && showMobileActions && (
-          <div
-            className={`
-              absolute flex items-center gap-1 z-10 animate-slide-in
-              ${isSentByMe ? '-right-14' : '-left-14'}
-            `}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {msg.content && (
+            <button
+              onClick={() => { handleCopy(); setShowMobileActions(false); }}
+              className="p-2 rounded-full bg-bg-card border border-border shadow-soft text-text-muted active:scale-90 active:bg-green-500/10 transition-all"
+              aria-label="Copy"
+            >
+              {copied ? <CheckCheck size={16} className="text-green-500" /> : <Copy size={16} />}
+            </button>
+            {isSentByMe && msg.content && (
               <button
-                onClick={handleCopy}
-                className="p-2 rounded-full bg-bg-card border border-border shadow-sm text-text-muted hover:text-accent-primary hover:bg-accent-light active:scale-90 transition-all"
-                title={copied ? "Copied!" : "Copy"}
-                aria-label="Copy message"
+                onClick={() => { handleStartEdit(); setShowMobileActions(false); }}
+                className="p-2 rounded-full bg-bg-card border border-border shadow-soft text-text-muted active:scale-90 active:bg-blue-500/10 transition-all"
+                aria-label="Edit"
               >
-                {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                <Pencil size={16} />
               </button>
             )}
           </div>
@@ -555,7 +600,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
           ) : msg.content ? (
             <p 
               className="leading-relaxed whitespace-pre-wrap text-[15px] select-text"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content.replace(/\n/g, '<br />')) }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.content.replace(/\n/g, '<br />'), { ALLOWED_TAGS: ['br', 'b', 'i', 'em', 'strong', 'u', 's'], ALLOWED_ATTR: [] }) }}
             />
           ) : null}
 
