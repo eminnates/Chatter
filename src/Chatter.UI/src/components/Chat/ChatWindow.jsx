@@ -39,7 +39,6 @@ const ChatWindow = ({
   onRetryMessage
 }) => {
   const virtuosoRef = useRef(null);
-  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -77,14 +76,10 @@ const ChatWindow = ({
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior });
   }, []);
 
-  // Kullanıcının scroll pozisyonunu takip et
-  const handleScroll = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const threshold = 150; // px
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-    isNearBottomRef.current = isNearBottom;
-    setShowScrollToBottom(!isNearBottom);
+  // Virtuoso bottom state callback
+  const handleAtBottomStateChange = useCallback((atBottom) => {
+    isNearBottomRef.current = atBottom;
+    setShowScrollToBottom(!atBottom);
   }, []);
 
   // Sadece alta yakınsa scroll et
@@ -126,8 +121,9 @@ const ChatWindow = ({
   // ============================================
   // LOADING STATE - Mesajlar yuklenirken
   // ============================================
+  const selectedUserId = selectedUser?.id;
   useEffect(() => {
-    if (selectedUser) {
+    if (selectedUserId) {
       setIsLoadingMessages(true);
       const timer = setTimeout(() => {
         setIsLoadingMessages(false);
@@ -135,7 +131,7 @@ const ChatWindow = ({
 
       return () => clearTimeout(timer);
     }
-  }, [selectedUser]);
+  }, [selectedUserId]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -375,44 +371,40 @@ const ChatWindow = ({
       {/* ============================================ */}
       <div
         id="chat-messages-area"
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className="relative flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent"
+        className="relative flex-1 overflow-hidden"
       >
         {/* Loading Skeleton */}
         {isLoadingMessages ? (
-          <div className="space-y-3 animate-fade-in">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-pulse`}
-              >
-                <div className={`flex items-end gap-2 max-w-[70%] ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}>
-                  {/* Avatar Skeleton */}
-                  {i % 2 !== 0 && (
-                    <div className="w-8 h-8 rounded-full bg-bg-hover flex-shrink-0" />
-                  )}
-
-                  {/* Message Bubble Skeleton */}
-                  <div className={`
-                    px-4 py-3 rounded-2xl space-y-2
-                    ${i % 2 === 0
-                      ? 'bg-accent-primary/20 rounded-tr-md'
-                      : 'bg-bg-card rounded-tl-md'
-                    }
-                  `}>
-                    <div className="h-3 bg-bg-hover rounded w-48" />
-                    {i % 3 === 0 && (
-                      <div className="h-3 bg-bg-hover rounded w-32" />
+          <div className="h-full overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent">
+            <div className="space-y-3 animate-fade-in">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-pulse`}
+                >
+                  <div className={`flex items-end gap-2 max-w-[70%] ${i % 2 === 0 ? 'flex-row-reverse' : 'flex-row'}`}>
+                    {i % 2 !== 0 && (
+                      <div className="w-8 h-8 rounded-full bg-bg-hover flex-shrink-0" />
                     )}
+                    <div className={`
+                      px-4 py-3 rounded-2xl space-y-2
+                      ${i % 2 === 0
+                        ? 'bg-accent-primary/20 rounded-tr-md'
+                        : 'bg-bg-card rounded-tl-md'
+                      }
+                    `}>
+                      <div className="h-3 bg-bg-hover rounded w-48" />
+                      {i % 3 === 0 && (
+                        <div className="h-3 bg-bg-hover rounded w-32" />
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         ) : displayMessages.length === 0 ? (
-          /* Empty State */
-          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+          <div className="flex flex-col items-center justify-center h-full text-center p-4 animate-fade-in">
             <div className="w-16 h-16 mb-4 rounded-full bg-gradient-to-br from-accent-primary/20 to-accent-secondary/20 flex items-center justify-center">
               {showSearch && searchQuery ? <Search size={32} className="text-text-muted" /> : <Smile size={32} className="text-accent-primary" />}
             </div>
@@ -427,16 +419,17 @@ const ChatWindow = ({
             </p>
           </div>
         ) : (
-          /* Messages List */
           <Virtuoso
             ref={virtuosoRef}
             style={{ height: '100%', width: '100%' }}
+            className="scrollbar-thin scrollbar-thumb-bg-hover hover:scrollbar-thumb-accent-primary/30 scrollbar-track-transparent"
             data={messagesWithDates}
             initialTopMostItemIndex={messagesWithDates.length - 1}
+            components={{ Footer: () => isTyping ? <div style={{ height: 48 }} /> : null }}
             itemContent={(index, item) => {
               if (item._type === 'date-separator') {
                 return (
-                  <div className="flex items-center justify-center my-3">
+                  <div className="flex items-center justify-center my-3 px-4">
                     <div className="px-3 py-1 rounded-full bg-bg-card text-text-muted text-xs font-medium border border-border-subtle shadow-soft">
                       {formatDateLabel(item._date)}
                     </div>
@@ -444,27 +437,31 @@ const ChatWindow = ({
                 );
               }
               return (
-                <MessageItem
-                  key={item.id || `temp-${index}`}
-                  msg={item}
-                  currentUserId={currentUserId}
-                  onImageClick={onImageClick}
-                  onReply={setReplyingTo}
-                  onEdit={onEditMessage}
-                  onAddReaction={onAddReaction}
-                  onRemoveReaction={onRemoveReaction}
-                  onRetry={onRetryMessage}
-                  isMobile={isMobile}
-                />
+                <div className="px-4 py-1">
+                  <MessageItem
+                    key={item.id || `temp-${index}`}
+                    msg={item}
+                    currentUserId={currentUserId}
+                    onImageClick={onImageClick}
+                    onReply={setReplyingTo}
+                    onEdit={onEditMessage}
+                    onAddReaction={onAddReaction}
+                    onRemoveReaction={onRemoveReaction}
+                    onRetry={onRetryMessage}
+                    isMobile={isMobile}
+                  />
+                </div>
               );
             }}
             followOutput="auto"
+            atBottomStateChange={handleAtBottomStateChange}
+            atBottomThreshold={150}
           />
         )}
 
-        {/* Typing Indicator */}
-        {isTyping && !isLoadingMessages && !showSearch && (
-          <div className="flex items-center gap-2 p-3 w-fit bg-bg-card border border-border-subtle rounded-2xl rounded-tl-md shadow-soft animate-slide-up">
+        {/* Typing Indicator - overlaid at bottom, always mounted to avoid animation restart */}
+        <div className={`absolute bottom-2 left-4 z-10 transition-opacity duration-200 ${isTyping && !isLoadingMessages && !showSearch ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <div className="flex items-center gap-2 p-3 w-fit bg-bg-card border border-border-subtle rounded-2xl rounded-tl-md shadow-soft">
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 bg-accent-primary rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
               <span className="w-2 h-2 bg-accent-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
@@ -472,13 +469,13 @@ const ChatWindow = ({
             </div>
             <span className="text-xs text-text-muted">typing</span>
           </div>
-        )}
+        </div>
 
         {/* Scroll to Bottom Button */}
         {showScrollToBottom && !isLoadingMessages && displayMessages.length > 0 && (
           <button
             onClick={() => scrollToBottom()}
-            className="sticky bottom-2 left-1/2 -translate-x-1/2 z-10 w-8 h-8 rounded-full bg-bg-card border border-border-subtle shadow-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-bg-hover transition-all animate-fade-in"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 w-8 h-8 rounded-full bg-bg-card border border-border-subtle shadow-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-bg-hover transition-all animate-fade-in"
             aria-label="Scroll to bottom"
           >
             <ChevronDown size={18} />

@@ -647,12 +647,13 @@ function App() {
     };
   }, [token, loadUsers, playSound, showNotification, markAsRead]);
 
+  const selectedUserId = selectedUser?.id;
   useEffect(() => {
-    if (selectedUser && token) {
-      loadMessages(selectedUser.id);
+    if (selectedUserId && token) {
+      loadMessages(selectedUserId);
       setIsTyping(false);
     }
-  }, [selectedUser, token, loadMessages]);
+  }, [selectedUserId, token, loadMessages]);
 
   // Typing Notification
   useEffect(() => {
