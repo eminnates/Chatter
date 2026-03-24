@@ -102,9 +102,7 @@ const ChatWindow = ({
     if (selectedUser) {
       setIsLoadingMessages(true);
       const timer = setTimeout(() => {
-        if (messages.length > 0) {
-          setIsLoadingMessages(false);
-        }
+        setIsLoadingMessages(false);
       }, 300);
 
       return () => clearTimeout(timer);

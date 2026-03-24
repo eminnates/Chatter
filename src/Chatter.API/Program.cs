@@ -71,7 +71,14 @@ builder.Services.AddSignalR(options =>
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
-}).AddMessagePackProtocol();
+}).AddMessagePackProtocol(options =>
+{
+    options.SerializerOptions = MessagePack.MessagePackSerializerOptions.Standard
+        .WithResolver(MessagePack.Resolvers.CompositeResolver.Create(
+            MessagePack.Resolvers.ContractlessStandardResolverAllowPrivate.Instance,
+            MessagePack.Resolvers.StandardResolver.Instance
+        ));
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();

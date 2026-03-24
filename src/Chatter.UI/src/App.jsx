@@ -101,6 +101,7 @@ function App() {
   const isMobileSidebarOpenRef = useRef(isMobileSidebarOpen);
   const showProfilePageRef = useRef(showProfilePage);
   const soundEnabledRef = useRef(soundEnabled);
+  const typingTimeoutRef = useRef(null);
 
   // === NATIVE STORAGE HYDRATION ===
   useEffect(() => {
@@ -538,11 +539,22 @@ function App() {
     });
 
     newConnection.on('UserTyping', (userId) => {
-      if (String(selectedUserRef.current?.id) === String(userId)) setIsTyping(true);
+      if (String(selectedUserRef.current?.id) === String(userId)) {
+        setIsTyping(true);
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 5000);
+      }
     });
 
     newConnection.on('UserStoppedTyping', (userId) => {
-      if (String(selectedUserRef.current?.id) === String(userId)) setIsTyping(false);
+      if (String(selectedUserRef.current?.id) === String(userId)) {
+        clearTimeout(typingTimeoutRef.current);
+        setIsTyping(false);
+      }
+    });
+
+    newConnection.on('ErrorMessage', (error) => {
+      console.error('SignalR error:', error);
     });
 
     // --- MESSAGE EDITED ---
@@ -603,11 +615,11 @@ function App() {
     if (!messageInput || !selectedUser || !connection || connection.state !== signalR.HubConnectionState.Connected) return;
     connection.invoke('NotifyTyping', selectedUser.id).catch(() => { });
     const timeout = setTimeout(() => {
-      if (connection.state === signalR.HubConnectionState.Connected) connection.invoke('StopTyping', selectedUser.id).catch(() => { });
+      if (connection.state === signalR.HubConnectionState.Connected) connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => { });
     }, 2000);
     return () => {
       clearTimeout(timeout);
-      if (connection?.state === signalR.HubConnectionState.Connected) connection.invoke('StopTyping', selectedUser.id).catch(() => { });
+      if (connection?.state === signalR.HubConnectionState.Connected) connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => { });
     };
   }, [messageInput, selectedUser, connection]);
 
@@ -681,10 +693,10 @@ function App() {
     }
     try {
       await connection.invoke('SendMessage', {
-        receiverId: selectedUser?.id,
-        content: msg.content,
-        attachment: msg.attachments?.[0] || null,
-        replyToMessageId: msg.replyMessage?.id || null
+        ReceiverId: selectedUser?.id,
+        Content: msg.content,
+        Attachment: msg.attachments?.[0] || null,
+        ReplyToMessageId: msg.replyMessage?.id || null
       });
       // Başarılı olunca _pending flag'ini kaldır
       setMessages(prev => prev.map(m =>
@@ -783,14 +795,14 @@ function App() {
 
     // Y2: Mesaj gönderilince typing indicator'ı hemen temizle
     if (connection?.state === signalR.HubConnectionState.Connected) {
-      connection.invoke('StopTyping', selectedUser.id).catch(() => {});
+      connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => {});
     }
 
     const messagePayload = {
-      receiverId: selectedUser.id,
-      content,
-      attachment: attachmentData,
-      replyToMessageId: replyToId
+      ReceiverId: selectedUser.id,
+      Content: content,
+      Attachment: attachmentData,
+      ReplyToMessageId: replyToId
     };
 
     // Bağlantı yoksa kuyruğa ekle
