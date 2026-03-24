@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, memo, useCallback } from 'react';
+import { useEffect, useRef, useState, memo, useCallback, lazy, Suspense } from 'react';
 import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search } from 'lucide-react';
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
 import { Virtuoso } from 'react-virtuoso';
+
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 const ChatWindow = ({
   selectedUser,
@@ -45,6 +47,26 @@ const ChatWindow = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleClickOutside = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
+  const onChatEmojiClick = (emojiData) => {
+    setMessageInput((prev) => prev + emojiData.emoji);
+  };
 
   // ============================================
   // SCROLL MANAGEMENT - Smart auto-scroll
@@ -538,7 +560,7 @@ const ChatWindow = ({
         )}
 
         {/* Input Container */}
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2" ref={emojiPickerRef}>
           {/* Hidden File Input */}
           <input
             type="file"
@@ -561,6 +583,39 @@ const ChatWindow = ({
             <Paperclip size={20} />
             <Ripple color="rgba(184, 212, 168, 0.2)" />
           </button>
+
+          {/* Emoji Button */}
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              className={`relative p-3 rounded-2xl text-text-muted hover:text-accent-primary hover:bg-accent-light transition-all active:scale-95 ripple-container ${showEmojiPicker ? 'text-accent-primary bg-accent-light' : ''}`}
+              onClick={(e) => { e.preventDefault(); setShowEmojiPicker(p => !p); }}
+              disabled={connectionStatus !== 'connected'}
+              title="Add Emoji"
+              aria-label="Add emoji"
+            >
+              <Smile size={20} />
+              <Ripple color="rgba(184, 212, 168, 0.2)" />
+            </button>
+            {showEmojiPicker && (
+              <div className="absolute bottom-full left-0 mb-4 z-50">
+                <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
+                  <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
+                    <EmojiPicker
+                      onEmojiClick={onChatEmojiClick}
+                      theme="dark"
+                      searchDisabled
+                      skinTonesDisabled
+                      previewConfig={{ showPreview: false }}
+                      width={300}
+                      height={350}
+                      lazyLoadEmojis
+                    />
+                  </Suspense>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Message Input */}
           <div className="flex-1 bg-bg-card border-2 border-border-subtle rounded-2xl focus-within:border-accent-primary transition-all shadow-soft">
