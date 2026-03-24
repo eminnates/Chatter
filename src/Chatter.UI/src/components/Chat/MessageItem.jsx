@@ -15,6 +15,8 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isLongPressing, setIsLongPressing] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const touchStartXRef = useRef(0);
   const longPressTimer = useRef(null);
   const emojiPickerRef = useRef(null);
   const editInputRef = useRef(null);
@@ -70,11 +72,15 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     return acc;
   }, {});
 
-  // --- MOBILE LONG PRESS ---
-  const handleTouchStart = () => {
+  // --- MOBILE GESTURES ---
+  const handleTouchStart = (e) => {
     if (!isMobile) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    setSwipeOffset(0);
+
     setIsLongPressing(true);
     longPressTimer.current = setTimeout(() => {
+      setShowContextMenu(true);
       setShowMobileActions(true);
       setIsLongPressing(false);
       // Haptic feedback if available
@@ -84,20 +90,49 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     }, 500);
   };
 
-  const handleTouchMove = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-      setIsLongPressing(false);
+  const handleTouchMove = (e) => {
+    if (!isMobile) return;
+
+    const currentX = e.touches[0].clientX;
+    const diffX = currentX - touchStartXRef.current;
+
+    // Swiping right to reply (positive X)
+    if (diffX > 0) {
+      if (Math.abs(diffX) > 10 && longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+        setIsLongPressing(false);
+      }
+      
+      const maxSwipe = 70;
+      const dampedOffset = Math.min(maxSwipe, diffX * 0.4);
+      setSwipeOffset(dampedOffset);
+    } else {
+      if (Math.abs(diffX) > 10 && longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+        setIsLongPressing(false);
+      }
     }
   };
 
   const handleTouchEnd = () => {
+    if (!isMobile) return;
+
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
     setIsLongPressing(false);
+
+    if (swipeOffset >= 50) {
+      handleReply();
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }
+    
+    setSwipeOffset(0);
   };
 
   // Close mobile actions on outside click
@@ -232,14 +267,30 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
+        style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeOffset ? 'none' : 'transform 0.2s ease' }}
       >
+        {/* Reply Icon Indicator while swiping */}
+        {isMobile && swipeOffset > 20 && (
+          <div 
+            className="absolute -left-10 flex items-center justify-center text-accent-primary"
+            style={{ 
+              opacity: Math.min(1, swipeOffset / 50),
+              transform: `scale(${Math.min(1.2, swipeOffset / 40)})` 
+            }}
+          >
+            <Reply size={20} />
+          </div>
+        )}
 
         {/* --- ACTION BUTTONS (Desktop Hover / Mobile Long-press) --- */}
         <div className={`
-          absolute flex items-center gap-1 z-10
-          ${isSentByMe ? '-left-24' : '-right-24'}
+          absolute flex flex-row items-center gap-1 z-[100]
+          ${isSentByMe 
+            ? (isMobile ? 'right-0 -top-12 bg-bg-card p-1.5 rounded-full shadow-lg border border-border/50' : '-left-24 sm:-left-36') 
+            : (isMobile ? 'left-0 -top-12 bg-bg-card p-1.5 rounded-full shadow-lg border border-border/50' : '-right-24 sm:-right-36')
+          }
           ${isMobile
-            ? (showMobileActions ? 'opacity-100' : 'opacity-0 pointer-events-none')
+            ? (showMobileActions ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none')
             : 'opacity-0 group-hover/message:opacity-100 pointer-events-none group-hover/message:pointer-events-auto'
           }
           transition-all duration-200

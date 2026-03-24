@@ -173,44 +173,6 @@ const ChatWindow = ({
     return () => clearTimeout(timer);
   }, [searchQuery, showSearch]);
 
-  // ============================================
-  // MOBILE SWIPE GESTURE - Sidebar acma
-  // ============================================
-  useEffect(() => {
-    if (!isMobile) return;
-
-    let touchStartX = 0;
-    let touchStartY = 0;
-
-    const handleTouchStart = (e) => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    };
-
-    const handleTouchEnd = (e) => {
-      const touchEndX = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      const diffX = touchEndX - touchStartX;
-      const diffY = Math.abs(touchEndY - touchStartY);
-
-      // Saga swipe (yatay > dikey ve ekranin sol kenarindan basladiysa)
-      if (diffX > 100 && diffY < 50 && touchStartX < 50) {
-        onMobileMenuOpen();
-      }
-    };
-
-    const chatArea = document.getElementById('chat-messages-area');
-    if (chatArea) {
-      chatArea.addEventListener('touchstart', handleTouchStart, { passive: true });
-      chatArea.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-      return () => {
-        chatArea.removeEventListener('touchstart', handleTouchStart);
-        chatArea.removeEventListener('touchend', handleTouchEnd);
-      };
-    }
-  }, [isMobile, onMobileMenuOpen]);
-
   // Determine which messages to display
   const displayMessages = showSearch && searchQuery.trim() && searchResults ? searchResults : messages;
 
