@@ -158,7 +158,11 @@ function App() {
       const { data } = await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${activeToken}` } })
       const userList = Array.isArray(data) ? data : (data.data || []);
 
-      setUsers(userList);
+      // Keep previous lastMessage data to prevent "Say hello!" flashing while fetching new last messages
+      setUsers(prev => userList.map(u => {
+        const existing = prev.find(p => p.id === u.id);
+        return existing ? { ...u, lastMessage: existing.lastMessage, lastMessageTime: existing.lastMessageTime } : u;
+      }));
 
       const usersWithLastMessages = await Promise.all(userList.map(async (u) => {
         try {
