@@ -84,6 +84,15 @@ namespace Chatter.Application.Services
                 // Get call with details for DTO
                 var callWithDetails = await _unitOfWork.Calls.GetCallWithDetailsAsync(call.Id);
                 
+                if (callWithDetails != null && callWithDetails.Initiator == null)
+                {
+                    var user = await _unitOfWork.Users.GetByIdAsync(initiatorId);
+                    if (user != null)
+                    {
+                        callWithDetails.Initiator = user;
+                    }
+                }
+                
                 return Result<CallDto>.Success(MapToDto(callWithDetails!));
             }
             catch (Exception ex)

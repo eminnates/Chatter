@@ -400,7 +400,7 @@ function App() {
 
   const handleInitiateCall = useCallback((receiverId, callType) => {
     const myId = getSafeUserId(user);
-    if (receiverId === myId) { showToast('Cannot call yourself', 'error'); return }
+    if (String(receiverId).toLowerCase() === String(myId).toLowerCase()) { showToast('Cannot call yourself', 'error'); return }
     if (activeCall && callStatus !== 'idle') { showToast('Already in call', 'error'); return }
     triggerHaptic(ImpactStyle.Medium)
     initiateCall(receiverId, callType)
@@ -929,18 +929,18 @@ function App() {
 
         {/* Call components with Suspense for lazy loading */}
         <Suspense fallback={null}>
-          {callStatus === 'ringing' && activeCall?.initiatorId !== getSafeUserId(user) && (
-            <IncomingCallModal call={activeCall} onAccept={acceptCall} onDecline={declineCall} />
-          )}
+            {callStatus === 'ringing' && String(activeCall?.initiatorId).toLowerCase() !== String(getSafeUserId(user)).toLowerCase() && (
+              <IncomingCallModal call={activeCall} onAccept={acceptCall} onDecline={declineCall} />
+            )}
 
-          {callStatus === 'ringing' && activeCall?.initiatorId === getSafeUserId(user) && (
-            <OutgoingCallScreen
-              call={activeCall}
-              users={users}
-              currentUserId={getSafeUserId(user)}
-              onEndCall={endCall}
-            />
-          )}
+            {callStatus === 'ringing' && String(activeCall?.initiatorId).toLowerCase() === String(getSafeUserId(user)).toLowerCase() && (
+              <OutgoingCallScreen
+                call={activeCall}
+                users={users}
+                currentUserId={getSafeUserId(user)}
+                onEndCall={endCall}
+              />
+            )}
 
           {callStatus === 'active' && (
             <ActiveCallScreen

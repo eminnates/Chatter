@@ -27,12 +27,12 @@ const ActiveCallScreen = ({
   const otherParticipant = useMemo(() => {
     if (!activeCall || !currentUserId) return null;
     
-    const otherUserId = activeCall.participantIds?.find(id => id !== currentUserId);
+    const otherUserId = activeCall.participantIds?.find(id => String(id).toLowerCase() !== String(currentUserId).toLowerCase());
     if (!otherUserId) return null;
     
-    return allUsers?.find(u => u.id === otherUserId) || {
-      fullName: activeCall.initiatorId === otherUserId ? activeCall.initiatorFullName : 'User',
-      userName: activeCall.initiatorId === otherUserId ? activeCall.initiatorUsername : 'User'
+    return allUsers?.find(u => String(u.id).toLowerCase() === String(otherUserId).toLowerCase()) || {
+      fullName: String(activeCall.initiatorId).toLowerCase() === String(otherUserId).toLowerCase() ? activeCall.initiatorFullName : 'User',
+      userName: String(activeCall.initiatorId).toLowerCase() === String(otherUserId).toLowerCase() ? activeCall.initiatorUsername : 'User'
     };
   }, [activeCall, currentUserId, allUsers]);
 

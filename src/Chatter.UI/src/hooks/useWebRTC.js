@@ -222,10 +222,11 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       
       // Set timeout for ringing state (45 seconds)
       callTimeoutRef.current = setTimeout(() => {
-        if (callStatus === 'ringing' && activeCall) {
+        const currentActiveCall = activeCallRef.current;
+        if (currentActiveCall && currentActiveCall.id) {
           console.log('⏰ Call timeout - no answer');
           if (showToast) showToast('Call timeout - no answer', 'info');
-          connection.invoke('DeclineCall', activeCall.id).catch(console.error);
+          connection.invoke('DeclineCall', currentActiveCall.id).catch(console.error);
           handleCallEnd();
         }
       }, 45000);
@@ -241,7 +242,7 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
   const acceptCall = useCallback(async (callIdOrObject) => {
     try {
       // Handle both call object and call ID
-      const callId = typeof callIdOrObject === 'object' ? callIdOrObject.id : callIdOrObject;
+      const callId = typeof callIdOrObject === 'object' ? (callIdOrObject.id || callIdOrObject.Id) : callIdOrObject;
       const callObject = typeof callIdOrObject === 'object' ? callIdOrObject : activeCall;
       
       if (!callId) {
@@ -348,28 +349,49 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
   useEffect(() => {
     if (!connection) return;
 
+    const normalizeCall = (c) => {
+      if (!c) return c;
+      return {
+        id: c.id || c.Id,
+        conversationId: c.conversationId || c.ConversationId,
+        initiatorId: c.initiatorId || c.InitiatorId,
+        initiatorUsername: c.initiatorUsername || c.InitiatorUsername,
+        initiatorFullName: c.initiatorFullName || c.InitiatorFullName,
+        type: c.type !== undefined ? c.type : c.Type,
+        status: c.status !== undefined ? c.status : c.Status,
+        createdAt: c.createdAt || c.CreatedAt,
+        startedAt: c.startedAt || c.StartedAt,
+        endedAt: c.endedAt || c.EndedAt,
+        durationInSeconds: c.durationInSeconds !== undefined ? c.durationInSeconds : c.DurationInSeconds,
+        participantIds: c.participantIds || c.ParticipantIds || []
+      };
+    };
+
     const handleCallInitiated = (call) => {
-      console.log('✅ Call initiated:', call);
-      setActiveCall(call);
+      const normalized = normalizeCall(call);
+      console.log('✅ Call initiated:', normalized);
+      setActiveCall(normalized);
       setCallStatus('ringing');
     };
 
     const handleIncomingCall = (call) => {
-      console.log('📞 Incoming call:', call);
-      setActiveCall(call);
+      const normalized = normalizeCall(call);
+      console.log('📞 Incoming call:', normalized);
+      setActiveCall(normalized);
       setCallStatus('ringing');
       
       if (showNotification) {
-        const isVideo = isVideoCallType(call);
+        const isVideo = isVideoCallType(normalized);
         const callTypeText = isVideo ? 'Video' : 'Voice';
-        const callerName = call.initiatorFullName || call.initiatorUsername || 'Someone';
-        showNotification(call.initiatorId, callerName, `Incoming ${callTypeText} Call`);
+        const callerName = normalized.initiatorFullName || normalized.initiatorUsername || 'Someone';
+        showNotification(normalized.initiatorId, callerName, `Incoming ${callTypeText} Call`);
       }
     };
 
     const handleCallAccepted = (call) => {
-      console.log('✅ Call accepted:', call);
-      setActiveCall(call);
+      const normalized = normalizeCall(call);
+      console.log('✅ Call accepted:', normalized);
+      setActiveCall(normalized);
       setCallStatus('active');
       
       if (isInitiator && localStreamRef.current && !peerRef.current) {
@@ -379,20 +401,24 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
     };
 
     const handleCallDeclined = (call) => {
-      console.log('❌ Call declined:', call);
+      const normalized = normalizeCall(call);
+      console.log('❌ Call declined:', normalized);
       if (showToast) showToast('Call declined', 'info');
       handleCallEnd();
     };
 
     const handleCallEnded = (call) => {
-      console.log('🔚 Call ended:', call);
+      const normalized = normalizeCall(call);
+      console.log('🔚 Call ended:', normalized);
       handleCallEnd();
     };
 
     const handleReceiveOffer = (signal) => {
       console.log('📥 Received WebRTC offer');
       try {
-        const data = JSON.parse(signal.sdp);
+        const sdpStr = signal.sdp || signal.Sdp;
+        if (!sdpStr) return;
+        const data = JSON.parse(sdpStr);
         if (peerRef.current) {
           peerRef.current.signal(data);
         }
@@ -404,7 +430,9 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
     const handleReceiveAnswer = (signal) => {
       console.log('📥 Received WebRTC answer');
       try {
-        const data = JSON.parse(signal.sdp);
+        const sdpStr = signal.sdp || signal.Sdp;
+        if (!sdpStr) return;
+        const data = JSON.parse(sdpStr);
         if (peerRef.current) {
           peerRef.current.signal(data);
         }
@@ -416,13 +444,14 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
     const handleReceiveICECandidate = (signal) => {
       console.log('📥 Received ICE candidate');
       
-      if (!signal.candidate || signal.candidate === '' || signal.candidate === 'null') {
+      const candidateStr = signal.candidate || signal.Candidate;
+      if (!candidateStr || candidateStr === '' || candidateStr === 'null') {
         console.warn('⚠️ Empty ICE candidate, ignoring');
         return;
       }
       
       try {
-        const candidate = JSON.parse(signal.candidate);
+        const candidate = JSON.parse(candidateStr);
         
         if (!candidate || !candidate.candidate || candidate.candidate.trim() === '') {
           console.warn('⚠️ Invalid candidate string, ignoring');

@@ -3,8 +3,8 @@ import { PhoneOff, Video, Phone } from 'lucide-react';
 import Ripple from '../Common/Ripple';
 
 const OutgoingCallScreen = ({ call, users, onEndCall, currentUserId }) => {
-  const otherUserId = call?.participantIds?.find(id => id !== currentUserId);
-  const otherUser = users?.find(u => u.id === otherUserId);
+  const otherUserId = call?.participantIds?.find(id => String(id).toLowerCase() !== String(currentUserId).toLowerCase());
+  const otherUser = users?.find(u => String(u.id).toLowerCase() === String(otherUserId).toLowerCase());
   const receiverName = otherUser?.fullName || otherUser?.userName || "User";
   const isVideoCall = call?.type === 2 || call?.type === 'Video';
 
