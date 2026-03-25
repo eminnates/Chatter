@@ -4,6 +4,7 @@ import { Menu, Phone, Video, Paperclip, X, Loader2, Send, Smile, Search, Chevron
 import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
 import { Virtuoso } from 'react-virtuoso';
+import { BACKEND_URL } from '../../config/constants';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
@@ -266,8 +267,18 @@ const ChatWindow = ({
             onKeyDown={(e) => e.key === 'Enter' && onProfileView()}
           >
             {/* Avatar */}
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-105 transition-transform">
-              {(selectedUser.fullName || selectedUser.userName)?.[0]?.toUpperCase()}
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
+              {selectedUser.profilePictureUrl ? (
+                <img
+                  src={selectedUser.profilePictureUrl.startsWith('http') ? selectedUser.profilePictureUrl : `${BACKEND_URL}${selectedUser.profilePictureUrl}`}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                />
+              ) : null}
+              <span className="flex items-center justify-center w-full h-full" style={{ display: selectedUser.profilePictureUrl ? 'none' : undefined }}>
+                {(selectedUser.fullName || selectedUser.userName)?.[0]?.toUpperCase()}
+              </span>
             </div>
 
             {/* Name & Status */}

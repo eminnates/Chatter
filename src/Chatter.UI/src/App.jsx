@@ -985,6 +985,11 @@ function App() {
                 API_URL={API_URL}
                 currentUserId={getSafeUserId(user)}
                 onClose={() => setShowProfilePage(false)}
+                onLogout={logout}
+                onUpdate={(updatedUser) => {
+                  setUser(prev => ({ ...prev, ...updatedUser }));
+                  storage.set('user', JSON.stringify({ ...user, ...updatedUser }));
+                }}
                 showToast={showToast}
               />
             </Suspense>

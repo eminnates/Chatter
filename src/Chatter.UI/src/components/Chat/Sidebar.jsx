@@ -2,6 +2,7 @@ import { memo, useState, useMemo } from 'react';
 import { Sun, Moon, Volume2, VolumeX, User, LogOut, Search, X } from 'lucide-react';
 import UserListItem from './UserListItem';
 import Ripple from '../Common/Ripple';
+import { BACKEND_URL } from '../../config/constants';
 
 const Sidebar = memo(({ 
   user, 
@@ -89,8 +90,18 @@ const Sidebar = memo(({
           >
             {/* Avatar with Status Ring */}
             <div className="relative">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-110 transition-transform">
-                {(user?.fullName || user?.userName)?.[0]?.toUpperCase()}
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-110 transition-transform overflow-hidden">
+                {user?.profilePictureUrl ? (
+                  <img
+                    src={user.profilePictureUrl.startsWith('http') ? user.profilePictureUrl : `${BACKEND_URL}${user.profilePictureUrl}`}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                <span className="flex items-center justify-center w-full h-full" style={{ display: user?.profilePictureUrl ? 'none' : undefined }}>
+                  {(user?.fullName || user?.userName)?.[0]?.toUpperCase()}
+                </span>
               </div>
               
               {/* Status Indicator */}
