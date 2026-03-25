@@ -18,6 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.AllowSynchronousIO = true;
+    options.Limits.MaxRequestBodySize = 50 * 1024 * 1024; // 50MB - video upload desteği
 });
 
 // Add detailed logging

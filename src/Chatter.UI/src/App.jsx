@@ -9,6 +9,7 @@ import './index.css'
 import { API_URL, HUB_URL } from './config/constants'
 import { sounds } from './utils/soundManager'
 import { checkAndroidUpdate } from './utils/androidUpdater';
+import { compressMedia } from './utils/mediaCompression';
 
 // --- COMPONENTS (Eager loaded - critical path) ---
 import AuthScreen from './components/Auth/AuthScreen'
@@ -492,8 +493,18 @@ function App() {
         isRead: rawMsg.isRead !== undefined ? rawMsg.isRead : (rawMsg.IsRead || false),
         replyToMessageId: rawMsg.replyToMessageId || rawMsg.ReplyToMessageId,
         replyMessage: rawMsg.replyMessage || rawMsg.ReplyMessage,
-        attachments: rawMsg.attachments || rawMsg.Attachments || [],
-        reactions: rawMsg.reactions || rawMsg.Reactions || [],
+        attachments: (rawMsg.attachments || rawMsg.Attachments || []).map(a => ({
+          id: a.id || a.Id,
+          fileName: a.fileName || a.FileName,
+          fileUrl: a.fileUrl || a.FileUrl,
+          type: a.type || a.Type,
+          fileSize: a.fileSize || a.FileSize,
+          mimeType: a.mimeType || a.MimeType,
+        })),
+        reactions: (rawMsg.reactions || rawMsg.Reactions || []).map(r => ({
+          userId: r.userId || r.UserId,
+          emoji: r.emoji || r.Emoji,
+        })),
         error: rawMsg.error || rawMsg.Error || false,
         sending: rawMsg.sending || rawMsg.Sending || false
       };
@@ -737,10 +748,17 @@ function App() {
       return;
     }
     try {
+      const att = msg.attachments?.[0];
       await connection.invoke('SendMessage', {
         ReceiverId: selectedUser?.id,
         Content: msg.content,
-        Attachment: msg.attachments?.[0] || null,
+        Attachment: att ? {
+          FileName: att.fileName || att.FileName,
+          FileUrl: att.fileUrl || att.FileUrl,
+          Type: att.type || att.Type,
+          FileSize: att.fileSize || att.FileSize,
+          MimeType: att.mimeType || att.MimeType || null
+        } : null,
         ReplyToMessageId: msg.replyMessage?.id || null
       });
       // Başarılı olunca _pending flag'ini kaldır
@@ -775,6 +793,28 @@ function App() {
     }
     setIsSearching(false);
   }, [token, selectedUser]);
+
+  // === FILE SELECT WITH COMPRESSION ===
+  const handleFileSelect = useCallback(async (file) => {
+    if (!file) { setSelectedFile(null); return; }
+    setSelectedFile(file);
+
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) return;
+
+    const threshold = isImage ? 1 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size <= threshold) return;
+
+    setIsCompressing(true);
+    try {
+      const compressed = await compressMedia(file);
+      setSelectedFile(compressed);
+    } catch (err) {
+      console.error('Compression failed:', err);
+    }
+    setIsCompressing(false);
+  }, []);
 
   // === SEND MESSAGE FUNCTION (OPTIMIZED FOR REPLY) ===
   const sendMessage = useCallback(async (e) => {
@@ -849,7 +889,13 @@ function App() {
     const messagePayload = {
       ReceiverId: selectedUser.id,
       Content: content,
-      Attachment: attachmentData,
+      Attachment: attachmentData ? {
+        FileName: attachmentData.fileName,
+        FileUrl: attachmentData.fileUrl,
+        Type: attachmentData.type,
+        FileSize: attachmentData.fileSize,
+        MimeType: attachmentData.mimeType || null
+      } : null,
       ReplyToMessageId: replyToId
     };
 
@@ -933,7 +979,8 @@ function App() {
           {showProfilePage ? (
             <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full"></div></div>}>
               <ProfilePage
-                user={viewProfileUserId ? users.find(u => u.id === viewProfileUserId) : user}
+                user={viewProfileUserId ? users.find(u => String(u.id) === String(viewProfileUserId)) : user}
+                userId={viewProfileUserId}
                 token={token}
                 API_URL={API_URL}
                 currentUserId={getSafeUserId(user)}
@@ -957,7 +1004,7 @@ function App() {
               onProfileView={() => { setViewProfileUserId(selectedUser.id); setShowProfilePage(true) }}
               callStatus={callStatus}
               selectedFile={selectedFile}
-              setSelectedFile={setSelectedFile}
+              setSelectedFile={handleFileSelect}
               isUploading={isUploading}
               uploadProgress={uploadProgress}
               isCompressing={isCompressing}

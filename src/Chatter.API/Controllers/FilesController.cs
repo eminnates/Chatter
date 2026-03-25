@@ -9,9 +9,9 @@ public class FilesController : BaseApiController
 {
     private readonly IWebHostEnvironment _env;
     // İzin verilen dosya uzantıları (Güvenlik için)
-    private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".docx", ".zip", ".mp3", ".mp4" };
-    // Maksimum dosya boyutu (Örn: 10MB)
-    private const long MaxFileSize = 10 * 1024 * 1024;
+    private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".docx", ".zip", ".mp3", ".mp4", ".mov", ".webm", ".avi" };
+    // Maksimum dosya boyutu (50MB - video desteği için)
+    private const long MaxFileSize = 50 * 1024 * 1024;
 
     public FilesController(IWebHostEnvironment env)
     {
@@ -19,6 +19,7 @@ public class FilesController : BaseApiController
     }
 
     [HttpPost("upload")]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50MB
     public async Task<IActionResult> Upload(IFormFile file)
     {
         try
@@ -124,6 +125,9 @@ public class FilesController : BaseApiController
                 ".zip" => "application/zip",
                 ".mp3" => "audio/mpeg",
                 ".mp4" => "video/mp4",
+                ".mov" => "video/quicktime",
+                ".webm" => "video/webm",
+                ".avi" => "video/x-msvideo",
                 _ => "application/octet-stream"
             };
 
