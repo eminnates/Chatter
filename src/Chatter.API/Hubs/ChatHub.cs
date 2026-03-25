@@ -14,13 +14,20 @@ public class ChatHub : Hub
     private readonly ICallService _callService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPushNotificationService _pushNotificationService;
+    private readonly Chatter.API.Services.PresenceTracker _presenceTracker;
 
-    public ChatHub(IChatService chatService, ICallService callService, IUnitOfWork unitOfWork, IPushNotificationService pushNotificationService)
+    public ChatHub(
+        IChatService chatService, 
+        ICallService callService, 
+        IUnitOfWork unitOfWork, 
+        IPushNotificationService pushNotificationService,
+        Chatter.API.Services.PresenceTracker presenceTracker)
     {
         _chatService = chatService;
         _callService = callService;
         _unitOfWork = unitOfWork;
         _pushNotificationService = pushNotificationService;
+        _presenceTracker = presenceTracker;
     }
 
     public override async Task OnConnectedAsync()
@@ -38,30 +45,26 @@ public class ChatHub : Hub
         {
             try
             {
-                var connection = new UserConnection
+                var userAgent = Context.GetHttpContext()?.Request.Headers["User-Agent"].ToString();
+                var ipAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
+
+                var isFirstConnection = _presenceTracker.UserConnected(userId, Context.ConnectionId, userAgent, ipAddress);
+
+                if (isFirstConnection)
                 {
-                    UserId = userId, 
-                    ConnectionId = Context.ConnectionId,
-                    UserAgent = Context.GetHttpContext()?.Request.Headers["User-Agent"].ToString(),
-                    IpAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString(),
-                    ConnectedAt = DateTime.UtcNow,
-                    IsActive = true
-                };
+                    // Diğer kullanıcılara bu kullanıcının online olduğunu bildir
+                    await Clients.AllExcept(Context.ConnectionId).SendAsync("UserOnline", userId);
+                }
 
-                await _unitOfWork.UserConnections.AddAsync(connection);
-            
-            // Kullanıcı durumunu güncelle
-            var user = await _unitOfWork.Users.GetByIdAsync(userId);
-            if (user != null)
-            {
-                user.SetOnlineStatus(true);
-            }
-
-                // Tek bir SaveChanges ile atomik işlem yapıyoruz
-                await _unitOfWork.SaveChangesAsync();
-                
-                // Diğer kullanıcılara bu kullanıcının online olduğunu bildir
-                await Clients.AllExcept(Context.ConnectionId).SendAsync("UserOnline", userId);
+                // Phase 3.1: Kullanıcı bağlandığında tüm conversation grublarına ekle
+                var userConversationsResult = await _chatService.GetUserConversationsAsync(userId);
+                if (userConversationsResult.IsSuccess && userConversationsResult.Value != null)
+                {
+                    foreach (var conv in userConversationsResult.Value)
+                    {
+                        await Groups.AddToGroupAsync(Context.ConnectionId, conv.Id.ToString());
+                    }
+                }
                 
                 Console.WriteLine($"✅ User {userId} connected: {Context.ConnectionId}");
             }
@@ -98,21 +101,10 @@ public class ChatHub : Hub
         {
             try
             {
-                // Interface'indeki isme göre güncelledik: DisconnectAsync
-                await _unitOfWork.UserConnections.DisconnectAsync(Context.ConnectionId);
-            
-            // DÜZELTME: Interface'indeki metod ismi GetUserActiveConnectionsAsync
-            var activeConnections = await _unitOfWork.UserConnections.GetUserActiveConnectionsAsync(userId);
-            
-            if (activeConnections == null || !activeConnections.Any())
-            {
-                var user = await _unitOfWork.Users.GetByIdAsync(userId);
-                if (user != null)
-                {
-                    user.SetOnlineStatus(false);
-                    user.LastSeenAt = DateTime.UtcNow;
-                }
+                var isLastConnection = _presenceTracker.UserDisconnected(userId, Context.ConnectionId);
                 
+                if (isLastConnection)
+                {
                     // Force end any active calls when user goes completely offline
                     var endedCalls = await _callService.ForceEndUserCallsAsync(userId);
                     if (endedCalls.IsSuccess && endedCalls.Value > 0)
@@ -122,13 +114,11 @@ public class ChatHub : Hub
                         await Clients.All.SendAsync("CallEnded", new { userId, reason = "UserDisconnected" });
                     }
                     
-                    await _unitOfWork.SaveChangesAsync();
                     await Clients.All.SendAsync("UserOffline", userId);
                     Console.WriteLine($"👋 User {userId} went offline");
                 }
                 else
                 {
-                    await _unitOfWork.SaveChangesAsync();
                     Console.WriteLine($"🔄 User {userId} still has active connections");
                 }
             }
@@ -227,18 +217,24 @@ public class ChatHub : Hub
         if (result.IsSuccess)
         {
             var messageDto = result.Value;
+            var conversationIdStr = messageDto.ConversationId.ToString();
 
-            // Alıcıya gönder
+            // Phase 3.1: Broadcast to the conversation group
+            await Clients.Group(conversationIdStr).SendAsync("ReceiveMessage", messageDto);
+
+            // Geriye dönük uyumluluk: Sadece ReceiverId varsa özel bir push notification gönder
             if (request.ReceiverId.HasValue)
             {
-                await Clients.User(request.ReceiverId.Value.ToString()).SendAsync("ReceiveMessage", messageDto);
-                Console.WriteLine($"📤 Message sent from {senderId} to {request.ReceiverId.Value}");
+                Console.WriteLine($"📤 Message sent from {senderId} to {request.ReceiverId.Value} in group {conversationIdStr}");
                 
                 // Send push notification to receiver (for background/offline users)
                 try
                 {
-                    var sender = await _unitOfWork.Users.GetByIdAsync(senderId);
-                    var senderName = sender?.FullName ?? sender?.UserName ?? "Someone";
+                    // Phase 1.4: Extract senderName from claims instead of DB query
+                    var senderName = Context.User?.FindFirst("FullName")?.Value 
+                                     ?? Context.User?.Identity?.Name 
+                                     ?? "Someone";
+                    
                     var messagePreview = messageDto.Content?.Length > 100 
                         ? messageDto.Content.Substring(0, 100) + "..." 
                         : messageDto.Content ?? "New message";
@@ -252,7 +248,7 @@ public class ChatHub : Hub
                         {
                             { "type", "message" },
                             { "senderId", senderId.ToString() },
-                            { "conversationId", messageDto.ConversationId.ToString() }
+                            { "conversationId", conversationIdStr }
                         }
                     );
                 }
@@ -261,9 +257,10 @@ public class ChatHub : Hub
                     Console.WriteLine($"⚠️ Push notification failed: {ex.Message}");
                 }
             }
-            
-            // Gönderene gönder (Diğer açık sekmeleri/cihazları varsa senkronize olur)
-            await Clients.User(senderIdString!).SendAsync("ReceiveMessage", messageDto);
+            else
+            {
+                Console.WriteLine($"📤 Message sent from {senderId} to group {conversationIdStr}");
+            }
         }
         else
         {
@@ -306,15 +303,8 @@ public class ChatHub : Hub
         if (result.IsSuccess)
         {
             var messageDto = result.Value;
-            // Konuşmadaki tüm katılımcılara düzenlenen mesajı bildir
-            var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(messageDto.ConversationId);
-            if (conversation != null)
-            {
-                foreach (var participant in conversation.Participants)
-                {
-                    await Clients.User(participant.UserId.ToString()).SendAsync("MessageEdited", messageDto);
-                }
-            }
+            // Phase 3.1: Use Clients.Group instead of iterating through participants
+            await Clients.Group(messageDto.ConversationId.ToString()).SendAsync("MessageEdited", messageDto);
         }
         else
         {
@@ -336,19 +326,13 @@ public class ChatHub : Hub
         var result = await _chatService.AddReactionAsync(messageId, userId, emoji);
         if (result.IsSuccess)
         {
-            // Mesajın hangi konuşmaya ait olduğunu bul
+            // Mesajın konuşmasını bul ve gruba gönder
             var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
             if (message != null)
             {
-                var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(message.ConversationId);
-                if (conversation != null)
-                {
-                    var payload = new { messageId, userId, emoji };
-                    foreach (var participant in conversation.Participants)
-                    {
-                        await Clients.User(participant.UserId.ToString()).SendAsync("ReactionAdded", payload);
-                    }
-                }
+                var payload = new { messageId, userId, emoji };
+                // Phase 3.1: Broadcast to the whole conversation group
+                await Clients.Group(message.ConversationId.ToString()).SendAsync("ReactionAdded", payload);
             }
         }
         else
@@ -377,15 +361,9 @@ public class ChatHub : Hub
         var result = await _chatService.RemoveReactionAsync(messageId, userId, emoji);
         if (result.IsSuccess)
         {
-            var conversation = await _unitOfWork.Conversations.GetByIdWithParticipantsAsync(message.ConversationId);
-            if (conversation != null)
-            {
-                var payload = new { messageId, userId, emoji };
-                foreach (var participant in conversation.Participants)
-                {
-                    await Clients.User(participant.UserId.ToString()).SendAsync("ReactionRemoved", payload);
-                }
-            }
+            var payload = new { messageId, userId, emoji };
+            // Phase 3.1: Broadcast to the whole conversation group
+            await Clients.Group(message.ConversationId.ToString()).SendAsync("ReactionRemoved", payload);
         }
         else
         {
@@ -527,10 +505,8 @@ public class ChatHub : Hub
                 IsRead = false
             };
             
-            foreach (var participantId in callDto.ParticipantIds)
-            {
-                await Clients.User(participantId.ToString()).SendAsync("ReceiveMessage", messageDto);
-            }
+            // Phase 3.1: Broadcast to the conversation group
+            await Clients.Group(callDto.ConversationId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
             Console.WriteLine($"❌ Call {callId} declined by {userId}");
         }
@@ -599,10 +575,8 @@ public class ChatHub : Hub
                     IsRead = false
                 };
                 
-                foreach (var participantId in callDto.ParticipantIds)
-                {
-                    await Clients.User(participantId.ToString()).SendAsync("ReceiveMessage", messageDto);
-                }
+                // Phase 3.1: Broadcast to the conversation group
+            await Clients.Group(callDto.ConversationId.ToString()).SendAsync("ReceiveMessage", messageDto);
             }
             
             Console.WriteLine($"📴 Call {callId} ended by {userId}");

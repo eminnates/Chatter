@@ -59,9 +59,15 @@ public class ChatService : IChatService
 
     public async Task<Result<MessageDto>> SendMessageAsync(SendMessageRequest request, Guid senderId)
     {
-        await _unitOfWork.BeginTransactionAsync();
         try
         {
+            var sender = await _unitOfWork.Users.GetByIdAsync(senderId);
+            if (sender == null)
+            {
+                return Result<MessageDto>.Failure(new Error("Chat.UserNotFound", "Gönderici bulunamadı."));
+            }
+            var senderName = sender.FullName ?? sender.UserName ?? string.Empty;
+
             Conversation? conversation = null;
 
             // 1. Konuşmayı Bul veya Oluştur
@@ -78,6 +84,7 @@ public class ChatService : IChatService
                 {
                     conversation = new Conversation
                     {
+                        Id = Guid.NewGuid(),
                         Type = ConversationType.OneToOne,
                         CreatedAt = DateTime.UtcNow,
                         IsActive = true
@@ -92,19 +99,35 @@ public class ChatService : IChatService
                     };
                     
                     conversation.Participants = participants;
-                    await _unitOfWork.SaveChangesAsync(); 
                 }
             }
 
             if (conversation == null)
             {
-                await _unitOfWork.RollbackTransactionAsync();
                 return Result<MessageDto>.Failure(new Error("Chat.ConversationError", "Konuşma bulunamadı."));
             }
 
-            // 2. Mesajı Oluştur
+            // 2. Reply Fetch Optimization (SaveChanges öncesine alındı)
+            ReplyMessageDto? replyDto = null;
+            if (request.ReplyToMessageId.HasValue)
+            {
+                var reply = await _unitOfWork.Messages.GetByIdWithDetailsAsync(request.ReplyToMessageId.Value);
+                if (reply != null)
+                {
+                    replyDto = new ReplyMessageDto
+                    {
+                        Id = reply.Id,
+                        SenderId = reply.SenderId,
+                        SenderName = reply.Sender?.FullName ?? reply.Sender?.UserName ?? string.Empty,
+                        Content = reply.Content
+                    };
+                }
+            }
+
+            // 3. Mesajı Oluştur
             var message = new Message
             {
+                Id = Guid.NewGuid(),
                 ConversationId = conversation.Id,
                 SenderId = senderId,
                 Content = request.Content ?? (request.Attachment != null ? "" : string.Empty),
@@ -119,6 +142,7 @@ public class ChatService : IChatService
             {
                 var attachment = new MessageAttachment
                 {
+                    Id = Guid.NewGuid(),
                     MessageId = message.Id,
                     FileName = request.Attachment.FileName,
                     FileUrl = request.Attachment.FileUrl,
@@ -131,43 +155,29 @@ public class ChatService : IChatService
             }
 
             await _unitOfWork.Messages.AddAsync(message);
-            await _unitOfWork.SaveChangesAsync();
             
-            // 3. Konuşma Bilgilerini Güncelle
+            // 4. Konuşma Bilgilerini Güncelle
             conversation.LastMessageId = message.Id;
             conversation.UpdatedAt = DateTime.UtcNow;
             
-            foreach (var participant in conversation.Participants.Where(p => p.UserId != senderId))
+            if (conversation.Participants != null)
             {
-                participant.UnreadCount++;
-            }
-
-            await _unitOfWork.SaveChangesAsync();
-            await _unitOfWork.CommitTransactionAsync();
-
-            // 4. DTO DÖNDÜR
-            ReplyMessageDto? replyDto = null;
-            if (message.ReplyToMessageId.HasValue)
-            {
-                var reply = await _unitOfWork.Messages.GetByIdWithDetailsAsync(message.ReplyToMessageId.Value);
-                if (reply != null)
+                foreach (var participant in conversation.Participants.Where(p => p.UserId != senderId))
                 {
-                    replyDto = new ReplyMessageDto
-                    {
-                        Id = reply.Id,
-                        SenderId = reply.SenderId,
-                        SenderName = reply.Sender?.FullName ?? reply.Sender?.UserName ?? string.Empty,
-                        Content = reply.Content
-                    };
+                    participant.UnreadCount++;
                 }
             }
 
+            // TEK SAVECHANGES
+            await _unitOfWork.SaveChangesAsync();
+
+            // 5. DTO DÖNDÜR
             var messageDto = new MessageDto
             {
                 Id = message.Id,
                 ConversationId = conversation.Id,
                 SenderId = senderId,
-                SenderName = "", 
+                SenderName = senderName, 
                 Content = message.Content,
                 SentAt = message.SentAt,
                 IsRead = false,
@@ -185,7 +195,6 @@ public class ChatService : IChatService
         }
         catch (Exception ex)
         {
-            await _unitOfWork.RollbackTransactionAsync();
             return Result<MessageDto>.Failure(new Error("Chat.SendException", $"Mesaj gönderilemedi: {ex.Message}"));
         }
     }
@@ -326,22 +335,17 @@ public class ChatService : IChatService
 
     public async Task<Result<MessageDto>> EditMessageAsync(Guid messageId, Guid userId, string newContent)
     {
-        var canEdit = await _unitOfWork.Messages.CanUserEditMessageAsync(messageId, userId);
-        if (!canEdit)
-            return Result<MessageDto>.Failure(new Error("Chat.EditDenied", "Bu mesajı düzenleme yetkiniz yok."));
-
-        // GetByIdAsync returns a tracked entity (uses FindAsync)
-        var trackedMessage = await _unitOfWork.Messages.GetByIdAsync(messageId);
-        if (trackedMessage == null)
-            return Result<MessageDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
-
-        trackedMessage.Edit(newContent);
-        await _unitOfWork.SaveChangesAsync();
-
-        // Re-fetch with details for the DTO (AsNoTracking is fine here)
         var message = await _unitOfWork.Messages.GetByIdWithDetailsAsync(messageId);
         if (message == null)
             return Result<MessageDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
+
+        if (message.SenderId != userId)
+            return Result<MessageDto>.Failure(new Error("Chat.EditDenied", "Bu mesajı düzenleme yetkiniz yok."));
+
+        message.Edit(newContent);
+        
+        _unitOfWork.Messages.Update(message);
+        await _unitOfWork.SaveChangesAsync();
 
         var dto = new MessageDto
         {
@@ -355,6 +359,13 @@ public class ChatService : IChatService
             EditedAt = message.EditedAt,
             IsRead = message.Status == MessageStatus.Read,
             ReplyToMessageId = message.ReplyToMessageId,
+            ReplyMessage = message.ReplyToMessage != null ? new ReplyMessageDto
+            {
+                Id = message.ReplyToMessage.Id,
+                SenderId = message.ReplyToMessage.SenderId,
+                SenderName = message.ReplyToMessage.Sender?.FullName ?? message.ReplyToMessage.Sender?.UserName ?? string.Empty,
+                Content = message.ReplyToMessage.Content
+            } : null,
             Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
             {
                 FileName = a.FileName,

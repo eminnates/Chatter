@@ -127,4 +127,46 @@ public class UserRepository : GenericRepository<AppUser, Guid>, IUserRepository
             .ThenBy(x => x.User.FullName)
             .ToList();
     }
-}
+
+    public async Task<IEnumerable<UserWithConversation>> GetUsersWithConversationsAsync(Guid currentUserId)
+    {
+        var query = _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.Id != currentUserId)
+            .Select(u => new
+            {
+                User = u,
+                ConversationStats = _context.Conversations
+                    .Where(c => c.Type == ConversationType.OneToOne &&
+                                c.Participants.Any(p => p.UserId == currentUserId) &&
+                                c.Participants.Any(p => p.UserId == u.Id))
+                    .Select(c => new
+                    {
+                        ConversationId = c.Id,
+                        UnreadCount = c.Messages.Count(m => m.SenderId == u.Id && m.Status != MessageStatus.Read && m.Type != MessageType.System),
+                        LastMessage = c.Messages.OrderByDescending(m => m.SentAt)
+                                                .Select(m => m.Content)
+                                                .FirstOrDefault(),
+                        LastMessageAt = c.Messages.OrderByDescending(m => m.SentAt)
+                                                  .Select(m => (DateTime?)m.SentAt)
+                                                  .FirstOrDefault()
+                    })
+                    .FirstOrDefault()
+            });
+
+        var result = await query.ToListAsync();
+
+        return result
+            .Select(x => new UserWithConversation
+            {
+                User = x.User,
+                ConversationId = x.ConversationStats?.ConversationId,
+                LastMessage = x.ConversationStats?.LastMessage,
+                LastMessageAt = x.ConversationStats?.LastMessageAt,
+                UnreadCount = x.ConversationStats?.UnreadCount ?? 0
+            })
+            .OrderByDescending(x => x.LastMessageAt ?? DateTime.MinValue)
+            .ThenBy(x => x.User.FullName)
+            .ToList();
+    }
+}}

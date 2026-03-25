@@ -8,6 +8,7 @@ namespace Chatter.Domain.Interfaces
         // GetByIdAsync BURADAN SİLİNDİ (Miras yoluyla geliyor)
         
         Task<IEnumerable<UserWithChatStats>> GetUsersWithChatStatsAsync(Guid currentUserId);
+        Task<IEnumerable<UserWithConversation>> GetUsersWithConversationsAsync(Guid currentUserId);
         
         Task<AppUser?> GetByEmailAsync(string email);
         Task<AppUser?> GetByUsernameAsync(string username);

@@ -78,25 +78,24 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
     // DÜZELTME: string userId -> Guid userId
     public async Task MarkMessagesAsReadAsync(Guid conversationId, Guid userId, CancellationToken cancellationToken = default)
     {
-        var messages = await _dbSet
+        var utcNow = DateTime.UtcNow;
+
+        await _dbSet
             .Where(m => m.ConversationId == conversationId &&
                        m.SenderId != userId &&
                        !m.IsDeleted &&
                        m.Status != MessageStatus.Read)
-            .ToListAsync(cancellationToken);
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(m => m.Status, MessageStatus.Read)
+                .SetProperty(m => m.ReadAt, utcNow),
+                cancellationToken);
 
-        foreach (var message in messages)
-        {
-            message.MarkAsRead();
-        }
-
-        var participant = await _context.ConversationParticipants
-            .FirstOrDefaultAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId, cancellationToken);
-
-        if (participant != null)
-        {
-            participant.MarkAsRead(DateTime.UtcNow);
-        }
+        await _context.ConversationParticipants
+            .Where(cp => cp.ConversationId == conversationId && cp.UserId == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(cp => cp.LastReadAt, utcNow)
+                .SetProperty(cp => cp.UnreadCount, 0),
+                cancellationToken);
     }
 
     public async Task<IEnumerable<Message>> SearchMessagesAsync(

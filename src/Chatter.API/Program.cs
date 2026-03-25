@@ -176,6 +176,10 @@ var connectionString = $"Host={dbHost};Database={dbName};Username={dbUser};Passw
 builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // Add Application Layer (Services)
+// Register Presence Tracker
+builder.Services.AddSingleton<Chatter.API.Services.PresenceTracker>();
+builder.Services.AddHostedService<Chatter.API.Services.PresenceAuditLogService>();
+
 builder.Services.AddApplication();
 
 // Add Infrastructure (DbContext, Identity, Repositories, UnitOfWork)

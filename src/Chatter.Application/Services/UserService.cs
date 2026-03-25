@@ -92,6 +92,34 @@ public class UserService : IUserService
         }
     }
 
+    public async Task<Result<IEnumerable<UserWithConversationDto>>> GetUsersWithConversationsAsync(Guid currentUserId)
+    {
+        try
+        {
+            var usersWithConversations = await _unitOfWork.Users.GetUsersWithConversationsAsync(currentUserId);
+            var dtos = usersWithConversations.Select(x => new UserWithConversationDto
+            {
+                Id = x.User.Id.ToString(),
+                UserName = x.User.UserName!,
+                FullName = x.User.FullName,
+                ProfilePictureUrl = x.User.ProfilePictureUrl,
+                IsOnline = x.User.IsOnline,
+                LastSeenAt = x.User.LastSeenAt,
+                
+                ConversationId = x.ConversationId?.ToString(),
+                LastMessage = x.LastMessage,
+                LastMessageAt = x.LastMessageAt,
+                UnreadCount = x.UnreadCount
+            });
+
+            return Result<IEnumerable<UserWithConversationDto>>.Success(dtos);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<UserWithConversationDto>>.Failure(new Error("User.FetchWithConversationsFailed", $"Sohbetli kullanıcı listesi alınamadı: {ex.Message}"));
+        }
+    }
+
     public async Task<Result<UserProfileResponse>> GetCurrentUserProfileAsync(Guid userId)
     {
         return await GetUserProfileAsync(userId);

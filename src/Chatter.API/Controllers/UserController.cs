@@ -35,6 +35,21 @@ public class UserController : BaseApiController // ControllerBase yerine BaseApi
         return HandleResult(result);
     }
 
+    [HttpGet("with-conversations")]
+    public async Task<IActionResult> GetUsersWithConversations()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var currentUserId))
+        {
+            return BadRequest(new { error = new { Code = "Auth.InvalidToken", Message = "Geçersiz veya eksik token." } });
+        }
+
+        var result = await _userService.GetUsersWithConversationsAsync(currentUserId);
+
+        return HandleResult(result);
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> SearchUsers([FromQuery] string q)
     {
