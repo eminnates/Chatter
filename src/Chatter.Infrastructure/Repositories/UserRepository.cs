@@ -169,4 +169,4 @@ public class UserRepository : GenericRepository<AppUser, Guid>, IUserRepository
             .ThenBy(x => x.User.FullName)
             .ToList();
     }
-}}
+}

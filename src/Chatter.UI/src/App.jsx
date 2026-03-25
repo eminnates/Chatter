@@ -540,7 +540,6 @@ function App() {
           }
           return u;
         }));
-        loadUsers(tokenRef.current);
         return;
       }
 
@@ -584,7 +583,6 @@ function App() {
         }
         return u;
       }));
-      loadUsers(tokenRef.current);
     });
 
     newConnection.on('UserOnline', (userId) => {
