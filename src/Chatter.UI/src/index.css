@@ -590,3 +590,11 @@ body.is-mobile .container {
     scroll-behavior: auto !important;
   }
 }
+
+/* Hide native fullscreen button on inline videos (portal fullscreen is used instead) */
+.video-no-native-fs video::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+.video-no-native-fs video::-moz-media-controls-fullscreen-button {
+  display: none !important;
+}

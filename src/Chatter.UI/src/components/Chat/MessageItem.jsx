@@ -15,6 +15,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const [editContent, setEditContent] = useState('');
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
+  const [fullscreenVideo, setFullscreenVideo] = useState(null);
   const touchStartXRef = useRef(0);
   const longPressTimer = useRef(null);
   const hasLongPressedRef = useRef(false);
@@ -519,14 +520,28 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                 ) : isVideo ? (
 
                   // --- VIDEO ATTACHMENT ---
-                  <div className="relative overflow-hidden rounded-xl border border-border-subtle">
+                  <div
+                    className="relative rounded-xl border border-border-subtle group/vid video-no-native-fs"
+                    onTouchStart={e => e.stopPropagation()}
+                    onTouchMove={e => e.stopPropagation()}
+                    onTouchEnd={e => e.stopPropagation()}
+                    onClick={e => e.stopPropagation()}
+                  >
                     <video
                       src={`${BACKEND_URL}${att.fileUrl}`}
                       controls
+                      controlsList="nofullscreen"
                       preload="metadata"
                       className="w-full max-h-[300px] rounded-xl bg-black"
                       playsInline
                     />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFullscreenVideo(`${BACKEND_URL}${att.fileUrl}`); }}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover/vid:opacity-100 transition-opacity"
+                      aria-label="Fullscreen"
+                    >
+                      <Maximize2 size={16} />
+                    </button>
                   </div>
 
                 ) : (
@@ -722,6 +737,33 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
           </button>
         )}
       </div>
+
+      {/* --- FULLSCREEN VIDEO PORTAL --- */}
+      {fullscreenVideo && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+          onClick={() => setFullscreenVideo(null)}
+        >
+          <button
+            onClick={() => setFullscreenVideo(null)}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <video
+            src={fullscreenVideo}
+            controls
+            autoPlay
+            className="w-full h-full object-contain"
+            playsInline
+            onClick={e => e.stopPropagation()}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
