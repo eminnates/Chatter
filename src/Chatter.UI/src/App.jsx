@@ -8,7 +8,7 @@ import './index.css'
 // --- CONFIG & UTILS ---
 import { API_URL, HUB_URL } from './config/constants'
 import { sounds } from './utils/soundManager'
-import { checkAndroidUpdate } from './utils/androidUpdater';
+import { checkForUpdate, downloadAndInstallUpdate } from './utils/androidUpdater';
 import { compressMedia } from './utils/mediaCompression';
 
 // --- COMPONENTS (Eager loaded - critical path) ---
@@ -18,6 +18,7 @@ import ChatWindow from './components/Chat/ChatWindow'
 import Toast from './components/Common/Toast'
 const TitleBar = lazy(() => import('./components/Common/TitleBar'))
 import ErrorBoundary from './components/Common/ErrorBoundary'
+import UpdateModal from './components/Common/UpdateModal'
 
 // --- COMPONENTS (Lazy loaded - reduces initial bundle ~30%) ---
 const IncomingCallModal = lazy(() => import('./components/Call/IncomingCallModal'))
@@ -91,6 +92,12 @@ function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [isNetworkOnline, setIsNetworkOnline] = useState(true)
 
+  // --- UPDATE STATE ---
+  const [updateInfo, setUpdateInfo] = useState(null)
+  const [updateStatus, setUpdateStatus] = useState('idle')
+  const [updateProgress, setUpdateProgress] = useState({ percent: 0, bytesDownloaded: 0, totalBytes: 0 })
+  const [updateError, setUpdateError] = useState(null)
+
   // === REFS ===
   const messageQueueRef = useRef([]);
   const selectedUserRef = useRef(null)
@@ -132,6 +139,54 @@ function App() {
     const duration = Math.min(Math.max(message.length * 50, 3000), 7000)
     setTimeout(() => setToast(null), duration)
   }, [])
+
+  // === UPDATE HANDLER ===
+  const handleUpdate = useCallback(async () => {
+    if (!updateInfo?.apkUrl) return;
+
+    if (updateStatus === 'downloaded') {
+      // Re-trigger install
+      setUpdateStatus('installing');
+      try {
+        await downloadAndInstallUpdate(updateInfo.apkUrl, () => {});
+      } catch (e) {
+        if (e.message === 'PERMISSION_NEEDED') {
+          setUpdateStatus('idle');
+          showToast('Bilinmeyen kaynaklardan kuruluma izin verin, sonra tekrar deneyin.', 'warning');
+        } else {
+          setUpdateStatus('error');
+          setUpdateError(e.message);
+        }
+      }
+      return;
+    }
+
+    setUpdateStatus('downloading');
+    setUpdateProgress({ percent: 0, bytesDownloaded: 0, totalBytes: 0 });
+    setUpdateError(null);
+
+    try {
+      await downloadAndInstallUpdate(updateInfo.apkUrl, (percent, bytesDownloaded, totalBytes) => {
+        setUpdateProgress({ percent, bytesDownloaded, totalBytes });
+        if (percent >= 100) setUpdateStatus('installing');
+      });
+    } catch (e) {
+      if (e.message === 'PERMISSION_NEEDED') {
+        setUpdateStatus('idle');
+        showToast('Bilinmeyen kaynaklardan kuruluma izin verin, sonra tekrar deneyin.', 'warning');
+      } else {
+        setUpdateStatus('error');
+        setUpdateError(e.message);
+      }
+    }
+  }, [updateInfo, updateStatus, showToast]);
+
+  const handleCloseUpdate = useCallback(() => {
+    setUpdateInfo(null);
+    setUpdateStatus('idle');
+    setUpdateProgress({ percent: 0, bytesDownloaded: 0, totalBytes: 0 });
+    setUpdateError(null);
+  }, []);
 
   // === LOGOUT ===
   const logout = useCallback(async () => {
@@ -357,7 +412,13 @@ function App() {
         });
 
         if (Capacitor.getPlatform() === 'android') {
-          setTimeout(() => { checkAndroidUpdate(showToast); }, 3000);
+          setTimeout(async () => {
+            const result = await checkForUpdate();
+            if (result.hasUpdate) {
+              setUpdateInfo(result);
+              setUpdateStatus('idle');
+            }
+          }, 3000);
         }
       }
       if (isTauri()) document.body.classList.add('is-desktop');
@@ -1055,6 +1116,18 @@ function App() {
 
           {lightboxImage && <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />}
         </Suspense>
+
+        {/* Update Modal */}
+        {updateInfo?.hasUpdate && (
+          <UpdateModal
+            updateInfo={updateInfo}
+            status={updateStatus}
+            progress={updateProgress}
+            errorMessage={updateError}
+            onUpdate={handleUpdate}
+            onClose={handleCloseUpdate}
+          />
+        )}
       </div>
     </ErrorBoundary>
   )
