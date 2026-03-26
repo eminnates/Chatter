@@ -126,3 +126,4 @@ src/Chatter.UI/.env.production
 CLAUDE.md
 releases/
 src/Chatter.UI/release.keystore
+scripts/release_notes.md

@@ -347,6 +347,33 @@ vercel --prod
 - GitHub Actions ile CI/CD yapılandırın
 - Bulut panelinde ortam değişkenlerini ayarlayın
 
+### Otomatik Release (CI/CD)
+
+Bu repo artık manuel tetiklenen bir release pipeline içerir.
+
+#### 1) Yerelden tek komutla tetikleme
+```bash
+bash scripts/release-tool.sh 1.7.0 "Yeni sürüm notları"
+```
+
+Bu komut:
+- GitHub Actions `release.yml` workflow’unu tetikler
+- Build durumunu canlı takip eder
+- İş bitince GitHub Releases sayfasına yönlendirir
+
+#### 2) Pipeline’ın yaptığı işler
+- Sürüm numarasını verilen değerle günceller (`package.json`, `tauri.conf.json`, `Cargo.toml`, `build.gradle`)
+- Sırayla build alır:
+  - API publish paketi (`.tar.gz`)
+  - Web build paketi (`.tar.gz`)
+  - Linux desktop paketleri (`.AppImage`, `.deb`)
+  - Android APK
+  - Windows desktop installer (`.exe`)
+- SHA256 checksum dosyası üretir
+- `v<version>` tag’i ile GitHub release oluşturur ve tüm dosyaları yükler
+
+> Not: `scripts/release-tool.sh` kullanmadan da GitHub > Actions > `Release Pipeline` ekranından manuel `workflow_dispatch` ile aynı süreç tetiklenebilir.
+
 ---
 
 ## Katkıda Bulunma
