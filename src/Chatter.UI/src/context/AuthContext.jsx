@@ -17,11 +17,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     tokenRef.current = token;
     userRef.current = user;
-    storage.setSync('token', token || '');
-    if (user) {
-        storage.setSync('user', JSON.stringify(user));
+    if (token) {
+      storage.set('token', token);
     } else {
-        storage.removeSync('user');
+      storage.remove('token');
+    }
+    if (user) {
+      storage.set('user', JSON.stringify(user));
+    } else {
+      storage.remove('user');
     }
   }, [token, user]);
 
@@ -42,8 +46,8 @@ export function AuthProvider({ children }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    storage.removeSync('token');
-    storage.removeSync('user');
+    storage.remove('token');
+    storage.remove('user');
   };
 
   return (
