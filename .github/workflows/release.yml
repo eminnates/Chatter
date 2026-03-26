@@ -84,9 +84,10 @@ jobs:
           cargo_text = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', cargo_text, count=1)
           cargo_toml.write_text(cargo_text, encoding="utf-8")
 
-          gradle_text = gradle_file.read_text(encoding="utf-8")
-          gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
-          gradle_file.write_text(gradle_text, encoding="utf-8")
+            if gradle_file.exists():
+              gradle_text = gradle_file.read_text(encoding="utf-8")
+              gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
+              gradle_file.write_text(gradle_text, encoding="utf-8")
 
           print(f"Version updated to {version}")
           PY
@@ -125,6 +126,9 @@ jobs:
       - name: Build Android APK
         working-directory: src/Chatter.UI
         run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
           npm run android:build
           APK=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
           if [ -z "$APK" ]; then
@@ -189,9 +193,10 @@ jobs:
           cargo_text = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', cargo_text, count=1)
           cargo_toml.write_text(cargo_text, encoding="utf-8")
 
-          gradle_text = gradle_file.read_text(encoding="utf-8")
-          gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
-          gradle_file.write_text(gradle_text, encoding="utf-8")
+            if gradle_file.exists():
+              gradle_text = gradle_file.read_text(encoding="utf-8")
+              gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
+              gradle_file.write_text(gradle_text, encoding="utf-8")
 
           print(f"Version updated to {version}")
           '@
