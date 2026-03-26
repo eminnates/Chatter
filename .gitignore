@@ -124,4 +124,5 @@ uploads/
 firebase-service-account.json
 src/Chatter.UI/.env.production
 CLAUDE.md
-
+releases/
+src/Chatter.UI/release.keystore

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Minus, Square, X, MessageCircle, Maximize2 } from 'lucide-react';
-import { Window } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '@tauri-apps/api/core';
 
 const TitleBar = ({ appName = "Chatter" }) => {
@@ -12,7 +12,7 @@ const TitleBar = ({ appName = "Chatter" }) => {
     const checkDesktop = async () => {
       if (isTauri()) {
         setIsDesktop(true);
-        const appWindow = Window.getCurrent();
+        const appWindow = getCurrentWindow();
         
         // Listen to resize events
         appWindow.onResized(async () => {
@@ -29,30 +29,30 @@ const TitleBar = ({ appName = "Chatter" }) => {
   if (!isDesktop) return null;
 
   const handleMinimize = () => {
-     Window.getCurrent()?.minimize();
+     getCurrentWindow()?.minimize();
   };
 
   const handleMaximize = async () => {
-    const appWindow = Window.getCurrent();
+    const appWindow = getCurrentWindow();
     if (appWindow) {
         await appWindow.toggleMaximize();
     }
   };
 
   const handleClose = () => {
-     Window.getCurrent()?.close();
+     getCurrentWindow()?.close();
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-8 bg-bg-sidebar border-b border-border-subtle flex items-center justify-between z-[9999] app-drag-region">
+    <div data-tauri-drag-region className="fixed top-0 left-0 right-0 h-8 bg-bg-sidebar border-b border-border-subtle flex items-center justify-between z-[9999] app-drag-region">
       {/* Left: App Icon & Name */}
-      <div className="flex items-center gap-2 px-3 no-drag">
-        <MessageCircle size={16} className="text-accent-primary" />
-        <span className="text-sm font-medium text-text-main select-none">{appName}</span>
+      <div data-tauri-drag-region className="flex items-center gap-2 px-3 no-drag">
+        <MessageCircle size={16} className="text-accent-primary pointer-events-none" />
+        <span className="text-sm font-medium text-text-main select-none pointer-events-none">{appName}</span>
       </div>
 
       {/* Right: Window Controls */}
-      <div className="flex items-center no-drag">
+      <div className="flex items-center no-drag z-50">
         {/* Minimize */}
         <button
           onClick={handleMinimize}
