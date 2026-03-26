@@ -84,7 +84,7 @@ jobs:
           cargo_text = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', cargo_text, count=1)
           cargo_toml.write_text(cargo_text, encoding="utf-8")
 
-            if gradle_file.exists():
+          if gradle_file.exists():
               gradle_text = gradle_file.read_text(encoding="utf-8")
               gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
               gradle_file.write_text(gradle_text, encoding="utf-8")
@@ -193,7 +193,7 @@ jobs:
           cargo_text = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', cargo_text, count=1)
           cargo_toml.write_text(cargo_text, encoding="utf-8")
 
-            if gradle_file.exists():
+          if gradle_file.exists():
               gradle_text = gradle_file.read_text(encoding="utf-8")
               gradle_text = re.sub(r'(?m)^\s*versionName\s+".*"\s*$', f'        versionName "{version}"', gradle_text, count=1)
               gradle_file.write_text(gradle_text, encoding="utf-8")
