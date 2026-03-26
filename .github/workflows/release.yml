@@ -129,7 +129,40 @@ jobs:
           if [ ! -d android ]; then
             npx cap add android
           fi
-          npm run android:build
+
+          npm run build
+          npx cap sync android
+
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          root = pathlib.Path("android")
+          variables = root / "variables.gradle"
+          build_gradle = root / "build.gradle"
+          wrapper = root / "gradle/wrapper/gradle-wrapper.properties"
+
+          if variables.exists():
+              txt = variables.read_text(encoding="utf-8")
+              txt = re.sub(r"(?m)^\s*compileSdkVersion\s*=\s*\d+\s*$", "    compileSdkVersion = 36", txt)
+              txt = re.sub(r"(?m)^\s*targetSdkVersion\s*=\s*\d+\s*$", "    targetSdkVersion = 36", txt)
+              variables.write_text(txt, encoding="utf-8")
+
+          if build_gradle.exists():
+              txt = build_gradle.read_text(encoding="utf-8")
+              txt = re.sub(r"classpath\s+'com\.android\.tools\.build:gradle:[^']+'", "classpath 'com.android.tools.build:gradle:8.9.1'", txt)
+              build_gradle.write_text(txt, encoding="utf-8")
+
+          if wrapper.exists():
+              txt = wrapper.read_text(encoding="utf-8")
+              txt = re.sub(r"distributionUrl=.*", "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.11.1-all.zip", txt)
+              wrapper.write_text(txt, encoding="utf-8")
+          PY
+
+          cd android
+          ./gradlew --no-daemon assembleRelease
+          cd ..
+
           APK=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
           if [ -z "$APK" ]; then
             echo "APK dosyası bulunamadı"
