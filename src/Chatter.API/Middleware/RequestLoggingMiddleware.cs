@@ -15,9 +15,17 @@ public class RequestLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Skip logging for WebSocket/SignalR paths — these are long-lived connections,
+        // not request/response cycles. Logging them wastes CPU on Stopwatch + string ops.
+        if (context.Request.Path.StartsWithSegments("/hubs"))
+        {
+            await _next(context);
+            return;
+        }
+
         // 1. Süre tutmaya başla
         var stopwatch = Stopwatch.StartNew();
-        
+
         try
         {
             // 2. İsteği bir sonraki adıma (Controller'a) devret

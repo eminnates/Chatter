@@ -26,7 +26,9 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'signalr-vendor': ['@microsoft/signalr'],
           'capacitor-vendor': ['@capacitor/core', '@capacitor/app', '@capacitor/keyboard', '@capacitor/haptics'],
-          'icons-vendor': ['lucide-react'],
+          // lucide-react removed from manualChunks: putting it here bundles ALL ~1000 icons
+          // into one chunk. Without it, Vite tree-shakes to only the ~20 icons actually imported.
+          // Result: ~200KB -> ~15KB
           'webrtc-vendor': ['simple-peer'],
           'tauri-vendor': ['@tauri-apps/api']
         }

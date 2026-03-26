@@ -13,9 +13,19 @@ public class PresenceTracker
     // Channel for background DB writing (audit log)
     public readonly Channel<PresenceLogMessage> ActivityChannel = Channel.CreateUnbounded<PresenceLogMessage>();
 
-    public bool UserConnected(Guid userId, string connectionId, string? userAgent, string? ipAddress)
+    // Per-user connection limit: web + mobile + desktop + 2 extra tabs = 5 max.
+    // Each WebSocket connection consumes ~40KB RAM. Without limits,
+    // 1000 users × 10 tabs = 400MB just for connections.
+    public const int MaxConnectionsPerUser = 5;
+
+    /// <summary>
+    /// Returns (isFirstConnection, evictedConnectionId).
+    /// If the user exceeds MaxConnectionsPerUser, the oldest connection is evicted.
+    /// </summary>
+    public (bool IsFirstConnection, string? EvictedConnectionId) UserConnected(Guid userId, string connectionId, string? userAgent, string? ipAddress)
     {
         bool isFirstConnection = false;
+        string? evictedConnection = null;
 
         _onlineUsers.AddOrUpdate(userId,
             _ =>
@@ -27,6 +37,12 @@ public class PresenceTracker
             {
                 lock (existingConnections)
                 {
+                    // Evict oldest connection if at limit
+                    if (existingConnections.Count >= MaxConnectionsPerUser)
+                    {
+                        evictedConnection = existingConnections.First();
+                        existingConnections.Remove(evictedConnection);
+                    }
                     existingConnections.Add(connectionId);
                 }
                 return existingConnections;
@@ -35,7 +51,7 @@ public class PresenceTracker
         // Write to channel
         ActivityChannel.Writer.TryWrite(new PresenceLogMessage(userId, connectionId, true, DateTimeOffset.UtcNow, userAgent, ipAddress));
 
-        return isFirstConnection; // Return true if this is the first connection for the user
+        return (isFirstConnection, evictedConnection);
     }
 
     public bool UserDisconnected(Guid userId, string connectionId)

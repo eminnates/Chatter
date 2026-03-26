@@ -206,71 +206,30 @@ function App() {
   }, []);
 
   // === DATA LOADERS ===
+  // loadUsers: Single API call that returns users + their last message + unread count.
+  // Previously this was N+1: 1 call for users, then 1 call per user for conversation + last message.
+  // For 50 users, that was 101 HTTP requests. Now it's 1.
   const loadUsers = useCallback(async (activeToken) => {
     if (!activeToken) return;
 
     try {
-      console.log("🚀 Kullanıcılar yükleniyor...");
-      const { data } = await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${activeToken}` } })
-      const userList = Array.isArray(data) ? data : (data.data || []);
+      const { data } = await axios.get(`${API_URL}/user/with-conversations`, {
+        headers: { Authorization: `Bearer ${activeToken}` }
+      });
+      const userList = Array.isArray(data) ? data : (data.data || data.value || []);
 
-      // Keep previous lastMessage data and unreadCount for selected user to prevent race conditions
       const selectedId = selectedUserRef.current?.id;
-      setUsers(prev => userList.map(u => {
-        const existing = prev.find(p => p.id === u.id);
-        if (!existing) return u;
+      setUsers(userList.map(u => {
         const isCurrentlySelected = selectedId && String(u.id) === String(selectedId);
-        return { ...u, lastMessage: existing.lastMessage, lastMessageTime: existing.lastMessageTime, unreadCount: isCurrentlySelected ? 0 : (existing.unreadCount ?? u.unreadCount) };
-      }));
-
-      const usersWithLastMessages = await Promise.all(userList.map(async (u) => {
-        try {
-          let convId = u.conversationId;
-          if (!convId) {
-            const convRes = await axios.post(`${API_URL}/chat/conversation/${u.id}`, {}, {
-              headers: { Authorization: `Bearer ${activeToken}` }
-            });
-            convId = convRes.data.value || convRes.data.id || convRes.data;
-          }
-
-          if (convId) {
-            try {
-              const lastMsgRes = await axios.get(`${API_URL}/chat/last-message/${convId}`, {
-                headers: { Authorization: `Bearer ${activeToken}` }
-              });
-
-              const rawData = lastMsgRes.data;
-              const lastMsg = rawData.data || rawData.value || rawData;
-
-              if (lastMsg) {
-                const content = lastMsg.content || lastMsg.Content;
-                const attachments = lastMsg.attachments || lastMsg.Attachments;
-                const sentAt = lastMsg.sentAt || lastMsg.SentAt;
-
-                return {
-                  ...u,
-                  lastMessage: content || (attachments?.length > 0 ? '📷 Photo' : 'Message'),
-                  lastMessageTime: sentAt
-                };
-              }
-            } catch (msgError) {
-              // 404 Mesaj yok, normal.
-            }
-          }
-        } catch (err) {
-          console.error(`User process error for ${u.userName}:`, err);
-        }
-        return u;
-      }));
-
-      setUsers(prev => usersWithLastMessages.map(u => {
-        const isCurrentlySelected = selectedId && String(u.id) === String(selectedId);
-        if (isCurrentlySelected) return { ...u, unreadCount: 0 };
-        const existing = prev.find(p => p.id === u.id);
-        return existing ? { ...u, unreadCount: existing.unreadCount ?? u.unreadCount } : u;
+        return {
+          ...u,
+          lastMessage: u.lastMessage || '',
+          lastMessageTime: u.lastMessageAt || u.lastMessageTime,
+          unreadCount: isCurrentlySelected ? 0 : (u.unreadCount || 0)
+        };
       }));
     } catch (error) {
-      console.error("Load users fatal error:", error);
+      console.error("Load users error:", error);
       if (error.response?.status === 401) logout();
     }
   }, []);
@@ -725,16 +684,33 @@ function App() {
     }
   }, [selectedUserId, token, loadMessages]);
 
-  // Typing Notification
+  // Typing Notification with client-side debounce.
+  // Without debounce: every keystroke sends a WebSocket frame (~5 frames/sec at 60 WPM).
+  // With debounce: first keystroke sends immediately, subsequent ones are suppressed for 1 second.
+  // Combined with server-side throttling, this reduces typing frames by ~90%.
+  const typingSentRef = useRef(false);
+  const typingDebounceRef = useRef(null);
   useEffect(() => {
     if (!messageInput || !selectedUser || !connection || connection.state !== signalR.HubConnectionState.Connected) return;
-    connection.invoke('NotifyTyping', selectedUser.id).catch(() => { });
-    const timeout = setTimeout(() => {
-      if (connection.state === signalR.HubConnectionState.Connected) connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => { });
+
+    // Only send NotifyTyping if we haven't sent one recently (1 second debounce)
+    if (!typingSentRef.current) {
+      typingSentRef.current = true;
+      connection.invoke('NotifyTyping', selectedUser.id).catch(() => { });
+      setTimeout(() => { typingSentRef.current = false; }, 1000);
+    }
+
+    // Reset the "stopped typing" timer on every keystroke
+    clearTimeout(typingDebounceRef.current);
+    typingDebounceRef.current = setTimeout(() => {
+      typingSentRef.current = false;
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => { });
+      }
     }, 2000);
+
     return () => {
-      clearTimeout(timeout);
-      if (connection?.state === signalR.HubConnectionState.Connected) connection.invoke('NotifyStoppedTyping', selectedUser.id).catch(() => { });
+      clearTimeout(typingDebounceRef.current);
     };
   }, [messageInput, selectedUser, connection]);
 

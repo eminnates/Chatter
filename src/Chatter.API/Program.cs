@@ -66,12 +66,14 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
 // SignalR configuration
-builder.Services.AddSignalR(options =>
+var signalRBuilder = builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 64 * 1024; // 64KB max message
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60); // Increased for mobile networks
+    options.MaximumParallelInvocationsPerClient = 1; // Backpressure: prevent client from flooding hub
+    options.StreamBufferCapacity = 20; // Backpressure: limit buffered stream items for slow clients
 }).AddMessagePackProtocol(options =>
 {
     options.SerializerOptions = MessagePack.MessagePackSerializerOptions.Standard
@@ -80,6 +82,19 @@ builder.Services.AddSignalR(options =>
             MessagePack.Resolvers.StandardResolver.Instance
         ));
 });
+
+// Redis backplane for horizontal scaling.
+// When REDIS_URL is set, SignalR uses Redis pub/sub to sync messages across instances.
+// Without this, each server instance has its own isolated set of connections/groups.
+var redisUrl = Environment.GetEnvironmentVariable("REDIS_URL");
+if (!string.IsNullOrEmpty(redisUrl))
+{
+    signalRBuilder.AddStackExchangeRedis(redisUrl, options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("Chatter");
+    });
+    Console.WriteLine("✅ SignalR Redis backplane enabled");
+}
 
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
@@ -121,42 +136,24 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
         policy => policy
-            .SetIsOriginAllowed(origin => 
+            .SetIsOriginAllowed(origin =>
             {
-                // Log the origin for debugging
-                Console.WriteLine($"🔍 CORS request from origin: {origin}");
-                
-                if (origin.StartsWith("http://localhost") ||
-                    origin.StartsWith("https://localhost") ||
-                    origin.StartsWith("http://tauri.localhost") ||
-                    origin.StartsWith("https://tauri.localhost") ||
-                    origin == "tauri://localhost" ||
-                    origin.StartsWith("capacitor://") ||
-                    origin.StartsWith("ionic://") ||
-                    origin.StartsWith("http://192.168.") ||
-                    origin.StartsWith("http://10.0.") ||
-                    origin.EndsWith(".vercel.app") ||
-                    origin.Contains("vercel.app") ||
-                    origin.Contains("ngrok") ||
-                    origin.EndsWith(".ngrok-free.dev") ||
-                    origin.EndsWith(".ngrok-free.app") ||
-                    origin.EndsWith(".ngrok.io") ||
-                    origin == "https://chatter-seven-pied.vercel.app")
-                {
-                    Console.WriteLine($"✅ CORS allowed for: {origin}");
-                    return true;
-                }
-                
-                var isAllowed = corsOrigins.Contains(origin);
-                if (isAllowed)
-                {
-                    Console.WriteLine($"✅ CORS allowed (from config): {origin}");
-                }
-                else
-                {
-                    Console.WriteLine($"❌ CORS blocked: {origin}");
-                }
-                return isAllowed;
+                // Fast origin check without Console.WriteLine on every request.
+                // Console.WriteLine is synchronous I/O — it blocks the thread on every CORS check.
+                return origin.StartsWith("http://localhost") ||
+                       origin.StartsWith("https://localhost") ||
+                       origin.StartsWith("http://tauri.localhost") ||
+                       origin.StartsWith("https://tauri.localhost") ||
+                       origin == "tauri://localhost" ||
+                       origin.StartsWith("capacitor://") ||
+                       origin.StartsWith("ionic://") ||
+                       origin.StartsWith("http://192.168.") ||
+                       origin.StartsWith("http://10.0.") ||
+                       origin.EndsWith(".vercel.app") ||
+                       origin.EndsWith(".ngrok-free.dev") ||
+                       origin.EndsWith(".ngrok-free.app") ||
+                       origin.EndsWith(".ngrok.io") ||
+                       corsOrigins.Contains(origin);
             })
             .AllowAnyMethod()
             .AllowCredentials()
@@ -179,6 +176,13 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 // Register Presence Tracker
 builder.Services.AddSingleton<Chatter.API.Services.PresenceTracker>();
 builder.Services.AddHostedService<Chatter.API.Services.PresenceAuditLogService>();
+
+// Register Push Notification Background Queue (decouples Firebase from hub methods)
+builder.Services.AddSingleton<Chatter.API.Services.PushNotificationQueue>();
+builder.Services.AddHostedService<Chatter.API.Services.PushNotificationBackgroundService>();
+
+// Hub rate limiting filter (protects WebSocket methods from spam/flooding)
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IHubFilter, Chatter.API.Filters.HubRateLimitFilter>();
 
 builder.Services.AddApplication();
 
@@ -316,7 +320,14 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseStaticFiles();
+// Static files with aggressive caching (uploaded files have unique URLs and never change)
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=604800,immutable");
+    }
+});
 // Add global exception handler middleware
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 

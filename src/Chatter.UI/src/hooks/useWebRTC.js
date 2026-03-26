@@ -174,13 +174,33 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
 
       } else if (data.candidate) {
         if (data.candidate.candidate && data.candidate.candidate.trim() !== '') {
-          console.log('📤 Sending ICE candidate');
-          connection.invoke('SendICECandidate',
-            call.id,
-            JSON.stringify(data.candidate),
-            data.candidate.sdpMid || '',
-            data.candidate.sdpMLineIndex || 0
-          ).catch(err => console.error('❌ Error sending ICE candidate:', err));
+          // ICE candidate batching: collect candidates within 200ms window,
+          // then send all at once. Reduces 20-50 individual WebSocket frames
+          // to 1-3 batched frames during call setup.
+          if (!peer._iceBatch) {
+            peer._iceBatch = [];
+            peer._iceBatchTimer = setTimeout(() => {
+              const batch = peer._iceBatch;
+              peer._iceBatch = null;
+              peer._iceBatchTimer = null;
+              if (batch && batch.length > 0) {
+                console.log(`📤 Sending ${batch.length} batched ICE candidates`);
+                connection.invoke('SendICECandidates', call.id, batch)
+                  .catch(err => {
+                    // Fallback: send individually if batch method not available
+                    batch.forEach(c => {
+                      connection.invoke('SendICECandidate', call.id, c.candidate, c.sdpMid, c.sdpMLineIndex)
+                        .catch(() => {});
+                    });
+                  });
+              }
+            }, 200);
+          }
+          peer._iceBatch.push({
+            candidate: JSON.stringify(data.candidate),
+            sdpMid: data.candidate.sdpMid || '',
+            sdpMLineIndex: data.candidate.sdpMLineIndex || 0
+          });
         }
       }
     });
