@@ -27,7 +27,6 @@ export default defineConfig({
           'signalr-vendor': ['@microsoft/signalr'],
           'capacitor-vendor': ['@capacitor/core', '@capacitor/app', '@capacitor/keyboard', '@capacitor/haptics'],
           'icons-vendor': ['lucide-react'],
-          'emoji-vendor': ['emoji-picker-react'],
           'webrtc-vendor': ['simple-peer'],
           'tauri-vendor': ['@tauri-apps/api']
         }

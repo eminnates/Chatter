@@ -2,15 +2,12 @@ import DOMPurify from "dompurify";
 import { memo, useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Video, Phone, File, Maximize2, Check, CheckCheck, Download, Reply, Copy, Loader2, AlertCircle, Smile, Pencil } from 'lucide-react';
-const EmojiPicker = lazy(() => import('emoji-picker-react'));
 import SecureImage from '../Common/SecureImage';
 import { BACKEND_URL } from '../../config/constants';
 
-const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, onAddReaction, onRemoveReaction, onRetry, isMobile }) => {
+const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, onAddReaction, onRemoveReaction, onRetry, isMobile, onOpenReactionPicker }) => {
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [pickerCoords, setPickerCoords] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isLongPressing, setIsLongPressing] = useState(false);
@@ -19,7 +16,6 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   const touchStartXRef = useRef(0);
   const longPressTimer = useRef(null);
   const hasLongPressedRef = useRef(false);
-  const emojiPickerRef = useRef(null);
   const editInputRef = useRef(null);
 
   // --- ID CHECK ---
@@ -152,19 +148,6 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     };
   }, [showMobileActions]);
 
-  // Close emoji picker on outside click
-  useEffect(() => {
-    if (!showEmojiPicker) return;
-
-    const handleClickOutside = (e) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmojiPicker]);
-
   // Focus edit input when editing
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -216,11 +199,6 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
     onEdit?.(msg.id, trimmed);
     setIsEditing(false);
     setEditContent('');
-  };
-
-  const handleEmojiSelect = (emojiData) => {
-    onAddReaction?.(msg.id, emojiData.emoji);
-    setShowEmojiPicker(false);
   };
 
   const handleReactionClick = (emoji) => {
@@ -321,15 +299,10 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
                       <button
                         onClick={(e) => { 
                           e.stopPropagation(); 
-                          if (!showEmojiPicker) {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setPickerCoords({ top: rect.top, left: rect.left });
-                            setShowEmojiPicker(true);
-                          } else {
-                            setShowEmojiPicker(false);
-                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          onOpenReactionPicker?.(msg.id, { top: rect.top, left: rect.left }, isSentByMe);
                         }}
-                        className={`p-2 rounded-full bg-bg-card border border-border shadow-sm hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all ${showEmojiPicker ? 'text-yellow-500 bg-yellow-500/10' : 'text-text-muted'}`}
+                        className={`p-2 rounded-full bg-bg-card border border-border shadow-sm hover:text-yellow-500 hover:bg-yellow-500/10 hover:scale-110 active:scale-95 transition-all text-text-muted`}
                         title="React"
                         aria-label="Add reaction"
                       >
@@ -378,8 +351,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
-                setPickerCoords({ top: rect.top, left: rect.left });
-                setShowEmojiPicker(true);
+                onOpenReactionPicker?.(msg.id, { top: rect.top, left: rect.left }, isSentByMe);
                 setShowMobileActions(false);
               }}
               className="p-2 rounded-full bg-bg-card border border-border shadow-soft text-text-muted active:scale-90 active:bg-yellow-500/10 transition-all"
@@ -404,41 +376,6 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
               </button>
             )}
           </div>
-        )}
-
-        {/* --- EMOJI PICKER POPUP --- */}
-        {showEmojiPicker && pickerCoords && createPortal(
-          <div
-            className={isMobile ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" : "fixed z-[9999]"}
-            style={isMobile ? {} : { 
-              top: Math.max(10, pickerCoords.top - 360) + 'px', 
-              left: isSentByMe ? Math.max(10, pickerCoords.left - 300) + 'px' : Math.max(10, pickerCoords.left) + 'px',
-            }}
-            onClick={(e) => {
-              if (isMobile && e.target === e.currentTarget) {
-                setShowEmojiPicker(false);
-              }
-              e.stopPropagation();
-            }}
-          >
-            <div ref={emojiPickerRef}>
-              <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card rounded-xl border border-border shadow-2xl flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
-                <div className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
-                  <EmojiPicker
-                  onEmojiClick={handleEmojiSelect}
-                  width={isMobile ? Math.min(300, window.innerWidth - 20) : 300}
-                  height={isMobile ? 300 : 350}
-                  searchDisabled={isMobile}
-                  skinTonesDisabled
-                  previewConfig={{ showPreview: false }}
-                  theme="dark"
-                  lazyLoadEmojis
-                />
-              </div>
-            </Suspense>
-            </div>
-          </div>,
-          document.body
         )}
 
         {/* --- MESSAGE BUBBLE --- */}

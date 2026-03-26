@@ -6,7 +6,7 @@ import Ripple from '../Common/Ripple';
 import { Virtuoso } from 'react-virtuoso';
 import { BACKEND_URL } from '../../config/constants';
 
-const EmojiPicker = lazy(() => import('emoji-picker-react'));
+const EmojiPickerWrapper = lazy(() => import('./EmojiPickerWrapper'));
 
 const ChatWindow = ({
   selectedUser,
@@ -50,24 +50,38 @@ const ChatWindow = ({
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [reactionPicker, setReactionPicker] = useState({ isOpen: false, msgId: null, coords: null, isSentByMe: false });
   const emojiPickerRef = useRef(null);
+  const reactionPickerRef = useRef(null);
 
-  // Close emoji picker on outside click
+  // Close emoji pickers on outside click
   useEffect(() => {
-    if (!showEmojiPicker) return;
-
     const handleClickOutside = (e) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
         setShowEmojiPicker(false);
+      }
+      if (reactionPicker.isOpen && reactionPickerRef.current && !reactionPickerRef.current.contains(e.target)) {
+        setReactionPicker({ isOpen: false, msgId: null, coords: null, isSentByMe: false });
       }
     };
     
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmojiPicker]);
+  }, [showEmojiPicker, reactionPicker.isOpen]);
 
   const onChatEmojiClick = (emojiData) => {
-    setMessageInput((prev) => prev + emojiData.emoji);
+    setMessageInput((prev) => prev + (emojiData.native || emojiData.emoji));
+  };
+
+  const handleOpenReactionPicker = useCallback((msgId, coords, isSentByMe) => {
+    setReactionPicker({ isOpen: true, msgId, coords, isSentByMe });
+  }, []);
+
+  const handleReactionEmojiClick = (emojiData) => {
+    if (reactionPicker.msgId) {
+      onAddReaction?.(reactionPicker.msgId, emojiData.native || emojiData.emoji);
+    }
+    setReactionPicker({ isOpen: false, msgId: null, coords: null, isSentByMe: false });
   };
 
   // ============================================
@@ -460,6 +474,7 @@ const ChatWindow = ({
                     onRemoveReaction={onRemoveReaction}
                     onRetry={onRetryMessage}
                     isMobile={isMobile}
+                    onOpenReactionPicker={handleOpenReactionPicker}
                   />
                 </div>
               );
@@ -638,15 +653,8 @@ const ChatWindow = ({
                   >
                     <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
                       <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
-                        <EmojiPicker
-                          onEmojiClick={(data) => { onChatEmojiClick(data); setShowEmojiPicker(false); }}
-                          theme="dark"
-                          searchDisabled
-                          skinTonesDisabled
-                          previewConfig={{ showPreview: false }}
-                          width={Math.min(350, window.innerWidth - 32)}
-                          height={400}
-                          lazyLoadEmojis
+                        <EmojiPickerWrapper
+                          onEmojiSelect={(data) => { onChatEmojiClick(data); setShowEmojiPicker(false); }}
                         />
                       </Suspense>
                     </div>
@@ -656,15 +664,8 @@ const ChatWindow = ({
                   <div className="absolute bottom-full left-0 mb-4 z-50">
                     <div ref={emojiPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-fade-in origin-bottom-left">
                       <Suspense fallback={<div className="w-[300px] h-[350px] flex items-center justify-center"><Loader2 className="animate-spin text-text-muted text-accent-primary" /></div>}>
-                        <EmojiPicker
-                          onEmojiClick={onChatEmojiClick}
-                          theme="dark"
-                          searchDisabled
-                          skinTonesDisabled
-                          previewConfig={{ showPreview: false }}
-                          width={300}
-                          height={350}
-                          lazyLoadEmojis
+                        <EmojiPickerWrapper
+                          onEmojiSelect={onChatEmojiClick}
                         />
                       </Suspense>
                     </div>
@@ -713,6 +714,31 @@ const ChatWindow = ({
           </div>
         </div>
       </form>
+
+      {/* --- SHARED REACTION TICKER POPUP --- */}
+      {reactionPicker.isOpen && reactionPicker.coords && createPortal(
+        <div
+          className={isMobile ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" : "fixed z-[9999]"}
+          style={isMobile ? {} : { 
+            top: Math.max(10, reactionPicker.coords.top - 360) + 'px', 
+            left: reactionPicker.isSentByMe ? Math.max(10, reactionPicker.coords.left - 300) + 'px' : Math.max(10, reactionPicker.coords.left) + 'px',
+          }}
+          onClick={(e) => {
+            if (isMobile && e.target === e.currentTarget) {
+              setReactionPicker((p) => ({ ...p, isOpen: false }));
+            }
+            e.stopPropagation();
+          }}
+        >
+          <div ref={reactionPickerRef} className="bg-bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in">
+            <Suspense fallback={<div className="w-[300px] h-[350px] bg-bg-card flex items-center justify-center"><Loader2 size={24} className="animate-spin text-text-muted" /></div>}>
+              <EmojiPickerWrapper onEmojiSelect={handleReactionEmojiClick} />
+            </Suspense>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 };
