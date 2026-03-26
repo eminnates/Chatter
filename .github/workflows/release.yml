@@ -125,6 +125,11 @@ jobs:
 
       - name: Build Android APK
         working-directory: src/Chatter.UI
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ ! -d android ]; then
             npx cap add android
@@ -163,7 +168,52 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           cd ..
 
-          APK=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
+          APKSIGNER=$(find "${ANDROID_HOME}/build-tools" -name apksigner | sort -V | tail -n 1)
+          ZIPALIGN=$(find "${ANDROID_HOME}/build-tools" -name zipalign | sort -V | tail -n 1)
+
+          UNSIGNED_APK=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*-unsigned.apk' | head -n 1)
+          SIGNED_APK=android/app/build/outputs/apk/release/app-release-signed.apk
+
+          if [ -n "$UNSIGNED_APK" ]; then
+            KS=/tmp/chatter-release.keystore
+            KS_ALIAS=chatter
+            KS_PASS=android
+            KEY_PASS=android
+
+            if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+              echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
+              KS_ALIAS="${ANDROID_KEYSTORE_ALIAS}"
+              KS_PASS="${ANDROID_KEYSTORE_PASSWORD}"
+              KEY_PASS="${ANDROID_KEY_PASSWORD}"
+            else
+              keytool -genkeypair -v \
+                -storetype PKCS12 \
+                -keystore "$KS" \
+                -alias "$KS_ALIAS" \
+                -storepass "$KS_PASS" \
+                -keypass "$KEY_PASS" \
+                -dname "CN=Chatter, OU=Release, O=Chatter, L=Istanbul, S=Istanbul, C=TR" \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000
+            fi
+
+            "$ZIPALIGN" -f 4 "$UNSIGNED_APK" /tmp/chatter-release-aligned.apk
+
+            "$APKSIGNER" sign \
+              --ks "$KS" \
+              --ks-key-alias "$KS_ALIAS" \
+              --ks-pass pass:"$KS_PASS" \
+              --key-pass pass:"$KEY_PASS" \
+              --out "$SIGNED_APK" \
+              /tmp/chatter-release-aligned.apk
+
+            "$APKSIGNER" verify "$SIGNED_APK"
+            APK="$SIGNED_APK"
+          else
+            APK=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
+          fi
+
           if [ -z "$APK" ]; then
             echo "APK dosyası bulunamadı"
             exit 1
