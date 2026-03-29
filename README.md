@@ -272,29 +272,36 @@ Her katman yalnızca bir alt katmanı tanır; bu sayede iş mantığı altyapıd
 ### Sistem Mimarisi
 
 ```mermaid
-graph TB
-    subgraph İstemciler
+graph TD
+    subgraph clients["İstemciler"]
         W[Web / PWA]
-        A[Android]
-        D[Masaüstü - Tauri]
+        AN[Android]
+        DE[Masaüstü · Tauri]
     end
 
-    subgraph ASP.NET Core API
-        C[REST Controller'lar]
-        H[SignalR Hub - /hubs/chat]
-        RL[Rate Limiting Middleware]
+    subgraph api["ASP.NET Core API"]
+        C[REST Controllers]
+        H[SignalR Hub]
     end
 
-    subgraph Altyapı
+    subgraph infra["Altyapı"]
         DB[(PostgreSQL)]
-        FCM[Firebase - Push]
+        FCM[Firebase]
     end
 
-    W & A & D -->|HTTPS REST| C
-    W & A & D -->|WebSocket| H
-    W & A -->|P2P WebRTC| W
-    C & H --> DB
-    H --> FCM
+    W  -->|HTTPS| C
+    AN -->|HTTPS| C
+    DE -->|HTTPS| C
+
+    W  -->|WebSocket| H
+    AN -->|WebSocket| H
+    DE -->|WebSocket| H
+
+    W <-.->|P2P · WebRTC| AN
+
+    C --> DB
+    H --> DB
+    H -->|Push| FCM
 ```
 
 ### Önemli Dosyalar
