@@ -273,7 +273,7 @@ Her katman yalnızca bir alt katmanı tanır; bu sayede iş mantığı altyapıd
 
 ```mermaid
 graph TD
-    subgraph clients["İstemciler"]
+    subgraph clients["☁️ İstemciler"]
         W[Web / PWA]
         AN[Android]
         DE[Masaüstü · Tauri]
@@ -289,15 +289,8 @@ graph TD
         FCM[Firebase]
     end
 
-    W  -->|HTTPS| C
-    AN -->|HTTPS| C
-    DE -->|HTTPS| C
-
-    W  -->|WebSocket| H
-    AN -->|WebSocket| H
-    DE -->|WebSocket| H
-
-    W <-.->|P2P · WebRTC| AN
+    clients -->|HTTPS| C
+    clients -->|WebSocket| H
 
     C --> DB
     H --> DB
