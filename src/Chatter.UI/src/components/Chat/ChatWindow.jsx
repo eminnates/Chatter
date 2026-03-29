@@ -235,7 +235,7 @@ const ChatWindow = ({
           <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-accent-warm/10 rounded-full blur-3xl"></div>
 
           <div className="relative z-10">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg shadow-accent-primary/20">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-glow animate-float">
               <Smile size={40} className="text-white" />
             </div>
             <h2 className="text-2xl font-bold text-text-main mb-3">

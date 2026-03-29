@@ -242,7 +242,7 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
   // --- NORMAL MESSAGE ---
   return (
     <div className={`
-      flex flex-col mb-3 w-full animate-slide-up group/message relative
+      flex flex-col mb-3 w-full animate-message-in group/message relative
       ${isSentByMe ? 'items-end' : 'items-start'}
       ${showMobileActions ? 'z-[99]' : 'z-0'}
     `}>
