@@ -273,7 +273,7 @@ Her katman yalnızca bir alt katmanı tanır; bu sayede iş mantığı altyapıd
 
 ```mermaid
 graph TD
-    subgraph clients["☁️ İstemciler"]
+    subgraph clients["İstemciler"]
         W[Web / PWA]
         AN[Android]
         DE[Masaüstü · Tauri]
