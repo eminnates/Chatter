@@ -9,5 +9,6 @@ namespace Chatter.Domain.Interfaces
         Task<Call?> GetActiveCallByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
         Task<IEnumerable<Call>> GetCallsByConversationIdAsync(Guid conversationId, CancellationToken cancellationToken = default);
         Task<int> ForceEndUserCallsAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task<IEnumerable<Call>> GetStaleRingingCallsAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
     }
 }

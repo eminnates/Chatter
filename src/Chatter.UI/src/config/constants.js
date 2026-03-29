@@ -9,4 +9,4 @@ export { BACKEND_URL };
 export const API_URL = `${BACKEND_URL}/api`;
 export const HUB_URL = `${BACKEND_URL}/hubs/chat`;
 
-console.log('🔗 Backend URL:', BACKEND_URL);
+// console.log('🔗 Backend URL:', BACKEND_URL);

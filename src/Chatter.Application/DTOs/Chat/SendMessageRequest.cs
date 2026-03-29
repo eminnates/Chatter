@@ -14,4 +14,7 @@ public class SendMessageRequest
 
     // Attachment hatalarını çözer:
     public AttachmentRequest? Attachment { get; set; }
+
+    // Frontend tarafından üretilen correlation ID (duplikasyon önleme)
+    public string? ClientMessageId { get; set; }
 }

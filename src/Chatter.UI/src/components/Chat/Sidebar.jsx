@@ -2,7 +2,9 @@ import { memo, useState, useMemo } from 'react';
 import { Sun, Moon, Volume2, VolumeX, User, LogOut, Search, X } from 'lucide-react';
 import UserListItem from './UserListItem';
 import Ripple from '../Common/Ripple';
+import { UserListItemSkeleton } from '../Common/Skeleton';
 import { BACKEND_URL } from '../../config/constants';
+import { avatarGradient } from '../../utils/helpers';
 
 const Sidebar = memo(({ 
   user, 
@@ -17,8 +19,9 @@ const Sidebar = memo(({
   onToggleSound, 
   onProfileClick, 
   onLogout, 
-  onSelectUser, 
-  onContextMenu 
+  onSelectUser,
+  onContextMenu,
+  isLoadingUsers
 }) => {
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,7 +93,7 @@ const Sidebar = memo(({
           >
             {/* Avatar with Status Ring */}
             <div className="relative">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-110 transition-transform overflow-hidden">
+              <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${avatarGradient(user?.id)} flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-110 transition-transform overflow-hidden`}>
                 {user?.profilePictureUrl ? (
                   <img
                     src={user.profilePictureUrl.startsWith('http') ? user.profilePictureUrl : `${BACKEND_URL}${user.profilePictureUrl}`}
@@ -284,6 +287,11 @@ const Sidebar = memo(({
             >
               Clear search
             </button>
+          </div>
+        ) : isLoadingUsers && users.filter(u => u.id !== user?.id).length === 0 ? (
+          /* Loading Skeleton */
+          <div className="space-y-0.5 px-1 pt-1">
+            {Array.from({ length: 7 }).map((_, i) => <UserListItemSkeleton key={i} />)}
           </div>
         ) : users.filter(u => u.id !== user?.id).length === 0 ? (
           /* Empty State */

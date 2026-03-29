@@ -16,6 +16,7 @@ import AuthScreen from './components/Auth/AuthScreen'
 import Sidebar from './components/Chat/Sidebar'
 import ChatWindow from './components/Chat/ChatWindow'
 import Toast from './components/Common/Toast'
+import ConnectionBanner from './components/Common/ConnectionBanner'
 const TitleBar = lazy(() => import('./components/Common/TitleBar'))
 import ErrorBoundary from './components/Common/ErrorBoundary'
 import UpdateModal from './components/Common/UpdateModal'
@@ -32,6 +33,7 @@ import { storage } from './utils/storage'
 
 // --- HOOKS ---
 import { useWebRTC } from './hooks/useWebRTC'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // --- NATIVE & ICONS ---
 import { App as CapacitorApp } from '@capacitor/app'
@@ -44,6 +46,81 @@ import { Network } from '@capacitor/network'
 
 // Axios Config
 axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
+
+// --- TOKEN REFRESH INTERCEPTOR ---
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) prom.reject(error);
+    else prom.resolve(token);
+  });
+  failedQueue = [];
+};
+
+// Bu fonksiyon App içinden setToken/setUser/logout ref'lerini alacak
+let _tokenRefreshCallbacks = { getToken: () => null, setToken: null, setUser: null, logout: null, tokenRef: null };
+
+export const setTokenRefreshCallbacks = (cbs) => { _tokenRefreshCallbacks = cbs; };
+
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(newToken => {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return axios(originalRequest);
+        }).catch(err => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const storedRefreshToken = await storage.get('refreshToken');
+        if (!storedRefreshToken) {
+          _tokenRefreshCallbacks.logout?.();
+          processQueue(new Error('No refresh token'), null);
+          return Promise.reject(error);
+        }
+
+        const currentToken = _tokenRefreshCallbacks.tokenRef?.current;
+        const { data } = await axios.post(`${API_URL}/auth/refresh`,
+          { refreshToken: storedRefreshToken },
+          {
+            headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
+            _retry: true // interceptor'ın bu isteği tekrar yakalamasını engelle
+          }
+        );
+
+        const newToken = data.token;
+        const newRefreshToken = data.refreshToken;
+
+        await storage.set('token', newToken);
+        await storage.set('refreshToken', newRefreshToken);
+
+        if (_tokenRefreshCallbacks.tokenRef) _tokenRefreshCallbacks.tokenRef.current = newToken;
+        _tokenRefreshCallbacks.setToken?.(newToken);
+
+        processQueue(null, newToken);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return axios(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        _tokenRefreshCallbacks.logout?.();
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // --- HAPTIC HELPER ---
 const triggerHaptic = async (style = ImpactStyle.Light) => {
@@ -76,6 +153,7 @@ function App() {
   // --- SEARCH STATE ---
   const [searchResults, setSearchResults] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
 
   const [lightboxImage, setLightboxImage] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -92,6 +170,9 @@ function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [isNetworkOnline, setIsNetworkOnline] = useState(true)
 
+  // --- PWA UPDATE ---
+  const { needRefresh: [pwaUpdateReady], updateServiceWorker } = useRegisterSW()
+
   // --- UPDATE STATE ---
   const [updateInfo, setUpdateInfo] = useState(null)
   const [updateStatus, setUpdateStatus] = useState('idle')
@@ -100,6 +181,7 @@ function App() {
 
   // === REFS ===
   const messageQueueRef = useRef([]);
+  const lastMessageTimestampRef = useRef(null); // reconnect catch-up için
   const selectedUserRef = useRef(null)
   const userRef = useRef(user)
   const usersRef = useRef(users)
@@ -110,6 +192,7 @@ function App() {
   const showProfilePageRef = useRef(showProfilePage);
   const soundEnabledRef = useRef(soundEnabled);
   const typingTimeoutRef = useRef(null);
+  const reactionDebounceRef = useRef({});
 
   // === NATIVE STORAGE HYDRATION ===
   useEffect(() => {
@@ -122,6 +205,18 @@ function App() {
         try { setUser(JSON.parse(nativeUser)); } catch {}
       }
     })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // === TOKEN REFRESH CALLBACK BAĞLAMA ===
+  useEffect(() => {
+    setTokenRefreshCallbacks({ tokenRef, setToken, setUser, logout: () => {
+      if (connectionRef.current) try { connectionRef.current.stop(); } catch {}
+      storage.remove('token');
+      storage.remove('user');
+      storage.remove('refreshToken');
+      setToken(null);
+      setUser(null);
+    }});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // === HELPER: GET SAFE USER ID ===
@@ -193,6 +288,7 @@ function App() {
     if (connection) try { await connection.stop(); } catch { }
     await storage.remove('token');
     await storage.remove('user');
+    await storage.remove('refreshToken');
     setToken(null);
     setUser(null);
   }, [connection]);
@@ -211,7 +307,7 @@ function App() {
   // For 50 users, that was 101 HTTP requests. Now it's 1.
   const loadUsers = useCallback(async (activeToken) => {
     if (!activeToken) return;
-
+    setIsLoadingUsers(true);
     try {
       const { data } = await axios.get(`${API_URL}/user/with-conversations`, {
         headers: { Authorization: `Bearer ${activeToken}` }
@@ -230,7 +326,8 @@ function App() {
       }));
     } catch (error) {
       console.error("Load users error:", error);
-      if (error.response?.status === 401) logout();
+    } finally {
+      setIsLoadingUsers(false);
     }
   }, []);
 
@@ -278,14 +375,6 @@ function App() {
     if (isMobile) setIsMobileSidebarOpen(false);
   }, [markAsRead, isMobile]);
 
-  const requestNotificationPermission = useCallback(async () => {
-    if (Capacitor.isNativePlatform()) {
-      try { await LocalNotifications.requestPermissions() } catch (err) { }
-    } else {
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission()
-    }
-  }, [])
-
   const showNotification = useCallback(async (senderId, senderName, messageContent) => {
     await triggerHaptic(ImpactStyle.Light)
     if (Capacitor.isNativePlatform()) {
@@ -298,18 +387,30 @@ function App() {
           extra: { senderId }
         }]
       }).catch(() => {});
-    } else if ('Notification' in window && Notification.permission === 'granted') {
-      const notif = new Notification(senderName, {
-        body: messageContent,
-        icon: '/icon.png',
-        silent: true
-      });
-      notif.onclick = () => {
-        window.focus();
-        const targetUser = usersRef.current.find(u => u.id === senderId);
-        if (targetUser) handleSelectUser(targetUser);
-        notif.close();
-      };
+    } else if ('Notification' in window) {
+      // Only show browser notification when the tab is in the background
+      if (!document.hidden) return;
+
+      if (Notification.permission === 'default' && !storage.getSync('notificationAsked')) {
+        // Contextual prompt: ask for permission only when a background message actually arrives
+        storage.set('notificationAsked', 'true')
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') return;
+      }
+
+      if (Notification.permission === 'granted') {
+        const notif = new Notification(senderName, {
+          body: messageContent,
+          icon: '/icon.png',
+          silent: true
+        });
+        notif.onclick = () => {
+          window.focus();
+          const targetUser = usersRef.current.find(u => u.id === senderId);
+          if (targetUser) handleSelectUser(targetUser);
+          notif.close();
+        };
+      }
     }
   }, [handleSelectUser])
 
@@ -426,20 +527,14 @@ function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => {
-    if (token && !storage.getSync('notificationAsked')) {
-      setTimeout(() => {
-        requestNotificationPermission()
-        storage.set('notificationAsked', 'true')
-      }, 3000)
-    }
-  }, [token, requestNotificationPermission])
+  // Notification permission is requested contextually (see showNotification),
+  // not automatically on login — avoids browser prompt appearing out of context.
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
   // === WEBRTC ===
-  const { localStream, remoteStream, callStatus, activeCall, initiateCall, acceptCall, declineCall, endCall, toggleAudio, toggleVideo } = useWebRTC(connection, getSafeUserId(user), showToast, showNotification)
+  const { localStream, remoteStream, callStatus, activeCall, connectionQuality, initiateCall, acceptCall, declineCall, endCall, toggleAudio, toggleVideo } = useWebRTC(connection, getSafeUserId(user), showToast, showNotification)
 
   const handleInitiateCall = useCallback((receiverId, callType) => {
     const myId = getSafeUserId(user);
@@ -486,14 +581,40 @@ function App() {
     newConnection.onreconnected(async () => {
       setConnectionStatus('connected');
       try {
-        // Token geçerliliğini doğrula
-        await axios.get(`${API_URL}/user`, { headers: { Authorization: `Bearer ${tokenRef.current}` } });
-        newConnection.invoke('SetUserOnline').then(() => loadUsers(tokenRef.current));
-      } catch (err) {
-        if (err.response?.status === 401) {
-          console.error('Token expired during reconnect');
-          logout();
+        newConnection.invoke('SetUserOnline').catch(() => {});
+        loadUsers(tokenRef.current);
+
+        // Reconnect catch-up: bağlantı kesilirken kaçırılan mesajları al
+        const selected = selectedUserRef.current;
+        const lastTs = lastMessageTimestampRef.current;
+        if (selected && lastTs) {
+          try {
+            const convRes = await axios.post(
+              `${API_URL}/chat/conversation/${selected.id}`, {},
+              { headers: { Authorization: `Bearer ${tokenRef.current}` } }
+            );
+            const convId = convRes.data.value || convRes.data.id || convRes.data;
+            if (convId) {
+              const since = lastTs.toISOString();
+              const { data } = await axios.get(
+                `${API_URL}/chat/messages/${convId}/since?timestamp=${encodeURIComponent(since)}`,
+                { headers: { Authorization: `Bearer ${tokenRef.current}` } }
+              );
+              const missed = Array.isArray(data) ? data : (data.data || data.value || []);
+              if (missed.length > 0) {
+                setMessages(prev => {
+                  const existingIds = new Set(prev.map(m => String(m.id)));
+                  const newOnes = missed.filter(m => !existingIds.has(String(m.id)));
+                  return newOnes.length > 0 ? [...prev, ...newOnes].sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt)) : prev;
+                });
+              }
+            }
+          } catch (catchupErr) {
+            console.warn('Reconnect catch-up failed:', catchupErr);
+          }
         }
+      } catch (err) {
+        console.warn('Reconnect handler error:', err);
       }
     });
 
@@ -526,8 +647,17 @@ function App() {
           emoji: r.emoji || r.Emoji,
         })),
         error: rawMsg.error || rawMsg.Error || false,
-        sending: rawMsg.sending || rawMsg.Sending || false
+        sending: rawMsg.sending || rawMsg.Sending || false,
+        clientMessageId: rawMsg.clientMessageId || rawMsg.ClientMessageId || null
       };
+
+      // Reconnect catch-up için son mesaj zamanını güncelle
+      if (msg.sentAt) {
+        const ts = new Date(msg.sentAt);
+        if (!lastMessageTimestampRef.current || ts > lastMessageTimestampRef.current) {
+          lastMessageTimestampRef.current = ts;
+        }
+      }
 
       const senderId = msg.senderId;
       const myId = getSafeUserId(userRef.current);
@@ -538,6 +668,16 @@ function App() {
         // Optimistik mesajı backend'den dönen gerçek mesajla değiştir
         setMessages(prev => {
           const msgId = msg.id;
+          // 1. ClientMessageId ile kesin eşleştirme
+          if (msg.clientMessageId) {
+            const tempIdx = prev.findIndex(m => m._clientMessageId === msg.clientMessageId);
+            if (tempIdx !== -1) {
+              const updated = [...prev];
+              updated[tempIdx] = msg;
+              return updated;
+            }
+          }
+          // 2. Fallback: eski yöntem (clientMessageId olmayan mesajlar için)
           const tempIdx = prev.findIndex(m =>
             typeof m.id === 'number' && m.content === msg.content && String(m.senderId) === String(myId)
           );
@@ -568,12 +708,20 @@ function App() {
           // Deduplication: eğer bu mesaj zaten varsa ekleme
           const msgId = msg.id;
           if (msgId && prev.some(m => String(m.id) === String(msgId))) return prev;
-          // Optimistik mesajla eşleştir: aynı content + yakın zaman
+          // ClientMessageId ile optimistik eşleştirme
+          if (msg.clientMessageId) {
+            const tempIdx = prev.findIndex(m => m._clientMessageId === msg.clientMessageId);
+            if (tempIdx !== -1) {
+              const updated = [...prev];
+              updated[tempIdx] = msg;
+              return updated;
+            }
+          }
+          // Fallback: eski yöntem
           const tempIdx = prev.findIndex(m =>
             typeof m.id === 'number' && m.content === msg.content && String(m.senderId) === String(msg.senderId)
           );
           if (tempIdx !== -1) {
-            // Geçici mesajı backend'den dönenle değiştir
             const updated = [...prev];
             updated[tempIdx] = msg;
             return updated;
@@ -759,6 +907,10 @@ function App() {
   // === REACTIONS ===
   const handleAddReaction = useCallback(async (messageId, emoji) => {
     if (!connection || connection.state !== signalR.HubConnectionState.Connected) return;
+    const key = `${messageId}-${emoji}`;
+    if (reactionDebounceRef.current[key]) return;
+    reactionDebounceRef.current[key] = true;
+    setTimeout(() => { delete reactionDebounceRef.current[key]; }, 200);
     try {
       await connection.invoke('AddReaction', messageId, emoji);
     } catch (e) {
@@ -892,8 +1044,10 @@ function App() {
     }
 
     // 2. Optimistic UI için geçici mesaj oluştur
+    const clientMessageId = crypto.randomUUID();
     const tempMsg = {
       id: Date.now(),
+      _clientMessageId: clientMessageId,
       content,
       senderId: myId,
       isRead: false,
@@ -931,7 +1085,8 @@ function App() {
         FileSize: attachmentData.fileSize,
         MimeType: attachmentData.mimeType || null
       } : null,
-      ReplyToMessageId: replyToId
+      ReplyToMessageId: replyToId,
+      ClientMessageId: clientMessageId
     };
 
     // Bağlantı yoksa kuyruğa ekle
@@ -973,6 +1128,9 @@ function App() {
       storage.set('user', JSON.stringify(userData));
       setToken(receivedToken);
       setUser(userData);
+      // Refresh token'ı da sakla
+      const refreshToken = responseData.refreshToken || responseData.data?.refreshToken;
+      if (refreshToken) storage.set('refreshToken', refreshToken);
     }
   };
 
@@ -1008,9 +1166,18 @@ function App() {
           onLogout={logout}
           onSelectUser={handleSelectUser}
           onContextMenu={(e, u) => { e.preventDefault(); setViewProfileUserId(u.id); setShowProfilePage(true) }}
+          isLoadingUsers={isLoadingUsers}
         />
 
         <div className="flex-1 relative flex flex-col h-full overflow-hidden">
+          <ConnectionBanner
+            connectionStatus={connectionStatus}
+            isNetworkOnline={isNetworkOnline}
+            onRetry={() => {
+              const conn = connectionRef.current;
+              if (conn && conn.state === 'Disconnected') conn.start().catch(console.error);
+            }}
+          />
           {showProfilePage ? (
             <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full"></div></div>}>
               <ProfilePage
@@ -1084,6 +1251,7 @@ function App() {
               activeCall={activeCall}
               currentUserId={getSafeUserId(user)}
               allUsers={users}
+              connectionQuality={connectionQuality}
               onEndCall={endCall}
               onToggleAudio={toggleAudio}
               onToggleVideo={toggleVideo}
@@ -1092,6 +1260,19 @@ function App() {
 
           {lightboxImage && <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />}
         </Suspense>
+
+        {/* PWA Update Banner */}
+        {pwaUpdateReady && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-3 px-4 py-3 rounded-xl bg-accent-primary text-white shadow-2xl animate-slide-up">
+            <span className="text-sm font-medium">Yeni sürüm mevcut</span>
+            <button
+              onClick={() => updateServiceWorker(true)}
+              className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-sm font-semibold transition-colors"
+            >
+              Güncelle
+            </button>
+          </div>
+        )}
 
         {/* Update Modal */}
         {updateInfo?.hasUpdate && (

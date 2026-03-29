@@ -5,6 +5,7 @@ import MessageItem from './MessageItem';
 import Ripple from '../Common/Ripple';
 import { Virtuoso } from 'react-virtuoso';
 import { BACKEND_URL } from '../../config/constants';
+import { avatarGradient } from '../../utils/helpers';
 
 const EmojiPickerWrapper = lazy(() => import('./EmojiPickerWrapper'));
 
@@ -281,7 +282,7 @@ const ChatWindow = ({
             onKeyDown={(e) => e.key === 'Enter' && onProfileView()}
           >
             {/* Avatar */}
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
+            <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${avatarGradient(selectedUser?.id)} flex items-center justify-center text-white font-semibold text-lg shadow-soft flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden`}>
               {selectedUser.profilePictureUrl ? (
                 <img
                   src={selectedUser.profilePictureUrl.startsWith('http') ? selectedUser.profilePictureUrl : `${BACKEND_URL}${selectedUser.profilePictureUrl}`}
@@ -397,6 +398,9 @@ const ChatWindow = ({
       <div
         id="chat-messages-area"
         className="relative flex-1 overflow-hidden"
+        role="log"
+        aria-live="polite"
+        aria-label="Messages"
       >
         {/* Loading Skeleton */}
         {isLoadingMessages ? (
@@ -680,7 +684,9 @@ const ChatWindow = ({
             <textarea
               ref={messageInputRef}
               value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value.length <= 5000) setMessageInput(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -690,9 +696,15 @@ const ChatWindow = ({
               placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
               disabled={connectionStatus !== 'connected'}
               rows={1}
+              maxLength={5000}
               className="w-full px-3 py-3 sm:px-4 bg-transparent text-text-main placeholder-text-muted/60 outline-none resize-none max-h-32 min-h-[48px] scrollbar-thin scrollbar-thumb-bg-hover scrollbar-track-transparent text-sm sm:text-base"
               aria-label="Message input"
             />
+            {messageInput.length > 4800 && (
+              <div className={`px-3 pb-1 text-xs text-right ${messageInput.length >= 5000 ? 'text-red-400' : 'text-text-muted'}`}>
+                {messageInput.length}/5000
+              </div>
+            )}
           </div>
 
           {/* RIGHT COMMAND CONTAINER (Send) */}

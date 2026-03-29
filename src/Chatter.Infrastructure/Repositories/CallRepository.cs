@@ -76,5 +76,15 @@ namespace Chatter.Infrastructure.Repositories
 
             return activeCalls.Count;
         }
+
+        public async Task<IEnumerable<Call>> GetStaleRingingCallsAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            var cutoff = DateTime.UtcNow - timeout;
+            return await _dbSet
+                .Include(c => c.Conversation)
+                    .ThenInclude(conv => conv.Participants)
+                .Where(c => c.Status == CallStatus.Ringing && c.CreatedAt < cutoff)
+                .ToListAsync(cancellationToken);
+        }
     }
 }

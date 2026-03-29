@@ -36,4 +36,7 @@ public interface IChatService
     // 9. Reaksiyon Ekleme/Kaldırma
     Task<Result<MessageReactionDto>> AddReactionAsync(Guid messageId, Guid userId, string emoji);
     Task<Result<bool>> RemoveReactionAsync(Guid messageId, Guid userId, string emoji);
+
+    // 10. Reconnection catch-up: belirli bir tarihten sonraki mesajlar
+    Task<Result<IEnumerable<MessageDto>>> GetMessagesSinceAsync(Guid conversationId, DateTime since, Guid userId);
 }

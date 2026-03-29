@@ -18,4 +18,5 @@ public class MessageDto
     public List<MessageAttachmentDto>? Attachments { get; set; } = new();
     public DateTime? EditedAt { get; set; }
     public List<MessageReactionDto>? Reactions { get; set; }
+    public string? ClientMessageId { get; set; }
 }

@@ -3,12 +3,13 @@ import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Maximize2, Minimiz
 import Ripple from '../Common/Ripple';
 import { isVideoCallType } from '../../utils/helpers';
 
-const ActiveCallScreen = ({ 
-  localStream, 
-  remoteStream, 
-  activeCall, 
+const ActiveCallScreen = ({
+  localStream,
+  remoteStream,
+  activeCall,
   currentUserId,
   allUsers,
+  connectionQuality,
   onEndCall,
   onToggleAudio,
   onToggleVideo
@@ -154,6 +155,18 @@ const ActiveCallScreen = ({
                 `}>
                   {remoteStream ? formatDuration(callDuration) : 'Connecting...'}
                 </span>
+                {remoteStream && connectionQuality && (
+                  <span className={`text-xs flex items-center gap-1 ${
+                    connectionQuality === 'good' ? 'text-green-400' :
+                    connectionQuality === 'fair' ? 'text-yellow-400' : 'text-red-400'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      connectionQuality === 'good' ? 'bg-green-400' :
+                      connectionQuality === 'fair' ? 'bg-yellow-400' : 'bg-red-400'
+                    }`} />
+                    {connectionQuality === 'good' ? 'İyi' : connectionQuality === 'fair' ? 'Orta' : 'Zayıf'}
+                  </span>
+                )}
                 {isVideoCall && (
                   <span className="text-white/60 text-xs">Video Call</span>
                 )}

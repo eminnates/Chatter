@@ -175,4 +175,18 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
         _context.Set<MessageReaction>().Remove(reaction);
         await Task.CompletedTask;
     }
+
+    public async Task<IEnumerable<Message>> GetMessagesSinceAsync(Guid conversationId, DateTime since, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .AsNoTracking()
+            .Include(m => m.Sender)
+            .Include(m => m.Attachments)
+            .Include(m => m.Reactions)
+                .ThenInclude(r => r.User)
+            .Include(m => m.ReplyToMessage)
+            .Where(m => m.ConversationId == conversationId && !m.IsDeleted && m.SentAt > since)
+            .OrderBy(m => m.SentAt)
+            .ToListAsync(cancellationToken);
+    }
 }

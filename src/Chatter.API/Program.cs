@@ -138,22 +138,31 @@ builder.Services.AddCors(options =>
         policy => policy
             .SetIsOriginAllowed(origin =>
             {
-                // Fast origin check without Console.WriteLine on every request.
-                // Console.WriteLine is synchronous I/O — it blocks the thread on every CORS check.
-                return origin.StartsWith("http://localhost") ||
-                       origin.StartsWith("https://localhost") ||
-                       origin.StartsWith("http://tauri.localhost") ||
-                       origin.StartsWith("https://tauri.localhost") ||
-                       origin == "tauri://localhost" ||
-                       origin.StartsWith("capacitor://") ||
-                       origin.StartsWith("ionic://") ||
-                       origin.StartsWith("http://192.168.") ||
-                       origin.StartsWith("http://10.0.") ||
-                       origin.EndsWith(".vercel.app") ||
-                       origin.EndsWith(".ngrok-free.dev") ||
-                       origin.EndsWith(".ngrok-free.app") ||
-                       origin.EndsWith(".ngrok.io") ||
-                       corsOrigins.Contains(origin);
+                // Explicitly whitelisted origins (from env var or defaults)
+                if (corsOrigins.Contains(origin)) return true;
+
+                // Native app origins (always allowed)
+                if (origin == "tauri://localhost" ||
+                    origin.StartsWith("capacitor://") ||
+                    origin.StartsWith("ionic://")) return true;
+
+                // Local development origins
+                if (origin.StartsWith("http://localhost") ||
+                    origin.StartsWith("https://localhost") ||
+                    origin.StartsWith("http://tauri.localhost") ||
+                    origin.StartsWith("https://tauri.localhost") ||
+                    origin.StartsWith("http://192.168.") ||
+                    origin.StartsWith("http://10.0.")) return true;
+
+                // Development-only: tunneling tools (ngrok etc.) — not allowed in production
+                if (builder.Environment.IsDevelopment())
+                {
+                    if (origin.EndsWith(".ngrok-free.dev") ||
+                        origin.EndsWith(".ngrok-free.app") ||
+                        origin.EndsWith(".ngrok.io")) return true;
+                }
+
+                return false;
             })
             .AllowAnyMethod()
             .AllowCredentials()
@@ -180,6 +189,9 @@ builder.Services.AddHostedService<Chatter.API.Services.PresenceAuditLogService>(
 // Register Push Notification Background Queue (decouples Firebase from hub methods)
 builder.Services.AddSingleton<Chatter.API.Services.PushNotificationQueue>();
 builder.Services.AddHostedService<Chatter.API.Services.PushNotificationBackgroundService>();
+
+// Stale call cleanup: marks ringing calls as Missed after 60s timeout
+builder.Services.AddHostedService<Chatter.API.Services.StaleCallCleanupService>();
 
 // Hub rate limiting filter (protects WebSocket methods from spam/flooding)
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IHubFilter, Chatter.API.Filters.HubRateLimitFilter>();
@@ -284,16 +296,14 @@ using (var scope = app.Services.CreateScope())
 // -------------------------------------
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-else
+
+if (!app.Environment.IsDevelopment())
 {
-    // Production: Allow Swagger and use HTTPS
-    app.UseSwagger();
-    app.UseSwaggerUI();
     app.UseHttpsRedirection();
 }
 
@@ -317,6 +327,16 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "connect-src 'self' wss: https:; " +
+        "img-src 'self' data: blob: https:; " +
+        "media-src 'self' blob: https:; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "script-src 'self'; " +
+        "font-src 'self' data:; " +
+        "frame-ancestors 'none'";
     await next();
 });
 

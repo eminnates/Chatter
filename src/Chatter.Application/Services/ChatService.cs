@@ -61,6 +61,9 @@ public class ChatService : IChatService
     {
         try
         {
+            if (request.Content != null && request.Content.Length > 5000)
+                return Result<MessageDto>.Failure(new Error("Chat.MessageTooLong", "Mesaj 5000 karakterden uzun olamaz."));
+
             var sender = await _unitOfWork.Users.GetByIdAsync(senderId);
             if (sender == null)
             {
@@ -188,7 +191,8 @@ public class ChatService : IChatService
                     FileUrl = a.FileUrl,
                     Type = a.Type.ToString(),
                     FileSize = a.FileSize
-                }).ToList()
+                }).ToList(),
+                ClientMessageId = request.ClientMessageId
             };
 
             return Result<MessageDto>.Success(messageDto);
@@ -446,5 +450,43 @@ public class ChatService : IChatService
         await _unitOfWork.SaveChangesAsync();
 
         return Result<bool>.Success(true);
+    }
+
+    public async Task<Result<IEnumerable<MessageDto>>> GetMessagesSinceAsync(Guid conversationId, DateTime since, Guid userId)
+    {
+        try
+        {
+            var messages = await _unitOfWork.Messages.GetMessagesSinceAsync(conversationId, since);
+            var dtos = messages.Select(m => new MessageDto
+            {
+                Id = m.Id,
+                ConversationId = m.ConversationId,
+                SenderId = m.SenderId,
+                SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? string.Empty,
+                Content = m.Content,
+                Type = m.Type.ToString(),
+                SentAt = m.SentAt,
+                IsRead = m.Status == Domain.Enums.MessageStatus.Read,
+                ReplyToMessageId = m.ReplyToMessageId,
+                EditedAt = m.EditedAt,
+                Attachments = m.Attachments?.Select(a => new MessageAttachmentDto
+                {
+                    FileName = a.FileName,
+                    FileUrl = a.FileUrl,
+                    Type = a.Type.ToString(),
+                    FileSize = a.FileSize
+                }).ToList(),
+                Reactions = m.Reactions?.Select(r => new MessageReactionDto
+                {
+                    UserId = r.UserId,
+                    Emoji = r.Emoji
+                }).ToList()
+            });
+            return Result<IEnumerable<MessageDto>>.Success(dtos);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<MessageDto>>.Failure(new Error("Chat.GetSinceFailed", ex.Message));
+        }
     }
 }

@@ -151,6 +151,17 @@ public class ChatController : BaseApiController
         return HandleResult(result);
     }
 
+    // 11. Reconnection catch-up: tarihten sonraki mesajlar
+    [HttpGet("messages/{conversationId}/since")]
+    public async Task<IActionResult> GetMessagesSince(Guid conversationId, [FromQuery] DateTime timestamp)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+            return Unauthorized();
+
+        var result = await _chatService.GetMessagesSinceAsync(conversationId, timestamp, currentUserId);
+        return HandleResult(result);
+    }
+
     // --- Yardımcı Metot ---
     private bool TryGetCurrentUserId(out Guid userId)
     {

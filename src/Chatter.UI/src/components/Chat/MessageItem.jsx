@@ -588,10 +588,21 @@ const MessageItem = memo(({ msg, currentUserId, onImageClick, onReply, onEdit, o
             </div>
           )}
 
-          {hasError && (
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-red-400">
-              <AlertCircle size={12} />
-              <span>Failed to send</span>
+          {(hasError || msg._pending) && !isSending && (
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1.5 text-xs text-red-400">
+                <AlertCircle size={12} />
+                <span>{msg._pending ? 'Kuyrukta bekliyor' : 'Gönderilemedi'}</span>
+              </div>
+              {hasError && (
+                <button
+                  onClick={() => onRetry?.(msg)}
+                  className="text-xs text-accent-primary hover:text-accent-primary/80 underline transition-colors"
+                  aria-label="Mesajı tekrar gönder"
+                >
+                  Tekrar Dene
+                </button>
+              )}
             </div>
           )}
         </div>

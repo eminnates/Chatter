@@ -1,8 +1,9 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Chatter.Application.DTOs.Auth;
 using Chatter.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Chatter.API.Controllers;
 
@@ -42,6 +43,35 @@ public class AuthController : BaseApiController // ControllerBase yerine BaseApi
         // Servis Result<LoginResponse> dönüyor
         var result = await _authService.LoginAsync(request);
         
+        return HandleResult(result);
+    }
+
+    /// <summary>
+    /// Token yenileme (Refresh Token ile)
+    /// </summary>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        // Expired JWT'yi header'dan oku (validation olmadan decode et)
+        JwtPayload? jwtPayload = null;
+        var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
+        {
+            var expiredToken = authHeader["Bearer ".Length..].Trim();
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwtToken = handler.ReadJwtToken(expiredToken);
+                jwtPayload = jwtToken.Payload;
+            }
+            catch
+            {
+                // Token parse edilemezse devam et, RefreshTokenAsync userId'yi refresh token'dan alacak
+            }
+        }
+
+        var result = await _authService.RefreshTokenAsync(request, jwtPayload!);
         return HandleResult(result);
     }
 

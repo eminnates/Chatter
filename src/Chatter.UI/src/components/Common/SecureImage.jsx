@@ -29,7 +29,7 @@ const SecureImage = memo(({ src, alt, className, onClick }) => {
         }
       })
       .catch(err => {
-        console.error('SecureImage load error:', err);
+        // console.error('SecureImage load error:', err);
         if (isMounted) {
           setError(true);
           setLoading(false);

@@ -30,11 +30,14 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
   const [callStatus, setCallStatus] = useState('idle');
   const [activeCall, setActiveCall] = useState(null);
   const [isInitiator, setIsInitiator] = useState(false);
-  
+  const [connectionQuality, setConnectionQuality] = useState('good'); // 'good' | 'fair' | 'poor'
+
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const callTimeoutRef = useRef(null);
   const activeCallRef = useRef(null);
+  const iceDisconnectTimerRef = useRef(null);
+  const qualityIntervalRef = useRef(null);
 
   // activeCall ref'ini her zaman güncel tut
   useEffect(() => {
@@ -131,11 +134,22 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       console.log('🔌 Peer connection destroyed');
     }
     
+    // ICE monitoring temizliği
+    if (iceDisconnectTimerRef.current) {
+      clearTimeout(iceDisconnectTimerRef.current);
+      iceDisconnectTimerRef.current = null;
+    }
+    if (qualityIntervalRef.current) {
+      clearInterval(qualityIntervalRef.current);
+      qualityIntervalRef.current = null;
+    }
+
     setLocalStream(null);
     setRemoteStream(null);
     setCallStatus('idle');
     setActiveCall(null);
     setIsInitiator(false);
+    setConnectionQuality('good');
   }, []);
 
   // Initialize peer connection
@@ -220,6 +234,72 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
       console.log('🔌 Peer connection closed');
       handleCallEnd();
     });
+
+    // ICE connection state monitoring
+    peer.on('connect', () => {
+      setConnectionQuality('good');
+      if (iceDisconnectTimerRef.current) {
+        clearTimeout(iceDisconnectTimerRef.current);
+        iceDisconnectTimerRef.current = null;
+      }
+    });
+
+    // Monitor RTCPeerConnection state directly
+    const monitorIceState = () => {
+      const pc = peer._pc;
+      if (!pc) return;
+
+      pc.addEventListener('iceconnectionstatechange', () => {
+        const state = pc.iceConnectionState;
+        console.log(`🧊 ICE state: ${state}`);
+
+        if (state === 'connected' || state === 'completed') {
+          setConnectionQuality('good');
+          if (iceDisconnectTimerRef.current) {
+            clearTimeout(iceDisconnectTimerRef.current);
+            iceDisconnectTimerRef.current = null;
+          }
+        } else if (state === 'disconnected') {
+          setConnectionQuality('poor');
+          // 5 saniye içinde kurtarılamazsa aramayı bitir
+          iceDisconnectTimerRef.current = setTimeout(() => {
+            if (peerRef.current?._pc?.iceConnectionState === 'disconnected') {
+              if (showToast) showToast('Bağlantı kesildi', 'error');
+              handleCallEnd();
+            }
+          }, 5000);
+        } else if (state === 'failed') {
+          setConnectionQuality('poor');
+          if (showToast) showToast('Arama bağlantısı başarısız', 'error');
+          handleCallEnd();
+        }
+      });
+
+      // Kalite izleme: her 4 saniyede packet loss kontrolü
+      qualityIntervalRef.current = setInterval(async () => {
+        if (!pc || pc.iceConnectionState !== 'connected') return;
+        try {
+          const stats = await pc.getStats();
+          let packetLoss = 0;
+          stats.forEach(report => {
+            if (report.type === 'inbound-rtp' && report.packetsLost != null && report.packetsReceived != null) {
+              const total = report.packetsReceived + report.packetsLost;
+              if (total > 0) packetLoss = report.packetsLost / total;
+            }
+          });
+          if (packetLoss > 0.1) setConnectionQuality('poor');
+          else if (packetLoss > 0.03) setConnectionQuality('fair');
+          else setConnectionQuality('good');
+        } catch (_) { /* getStats hata verirse sessizce geç */ }
+      }, 4000);
+    };
+
+    // _pc simple-peer'ın iç RTCPeerConnection'ı, signal sonrası hazır olur
+    if (peer._pc) {
+      monitorIceState();
+    } else {
+      peer.once('signal', () => { if (peer._pc) monitorIceState(); });
+    }
 
     peerRef.current = peer;
     return peer;
@@ -540,6 +620,7 @@ export const useWebRTC = (connection, currentUserId, showToast, showNotification
     remoteStream,
     callStatus,
     activeCall,
+    connectionQuality,
     initiateCall,
     acceptCall,
     declineCall,

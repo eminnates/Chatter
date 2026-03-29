@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { Phone, Video, Archive, Pin, Volume2, VolumeX, Trash2, MoreVertical } from 'lucide-react';
 import Ripple from '../Common/Ripple';
 import { BACKEND_URL } from '../../config/constants';
+import { avatarGradient } from '../../utils/helpers';
 
 const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -85,7 +86,7 @@ const UserListItem = memo(({ user, isSelected, onClick, onContextMenu }) => {
       <div className="relative shrink-0">
         <div className={`
           w-12 h-12 flex items-center justify-center rounded-full
-          bg-gradient-to-br from-accent-primary to-accent-secondary
+          bg-gradient-to-br ${avatarGradient(user.id)}
           text-white font-bold text-lg shadow-soft overflow-hidden
           ${user.isOnline ? 'ring-2 ring-green-500/30 ring-offset-2 ring-offset-bg-card' : ''}
           transition-all duration-300 group-hover:scale-110 group-hover:rotate-3

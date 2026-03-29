@@ -18,5 +18,6 @@ namespace Chatter.Domain.Interfaces
         Task<MessageReaction?> GetUserReactionAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
         Task AddReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default);
         Task RemoveReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default);
+        Task<IEnumerable<Message>> GetMessagesSinceAsync(Guid conversationId, DateTime since, CancellationToken cancellationToken = default);
     }
 }

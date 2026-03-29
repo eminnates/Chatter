@@ -84,10 +84,9 @@ namespace Chatter.Application.Services
 
                 return Result<Guid>.Success(user.Id);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                // Loglama yapılabilir (ex.Message)
                 return Result<Guid>.Failure(new Error("Auth.Exception", "Kayıt işlemi sırasında beklenmedik bir hata oluştu."));
             }
         }
@@ -164,9 +163,32 @@ namespace Chatter.Application.Services
         }
 
         // Interface'e uygun dönüş tiplerini güncelledik
-        public Task<Result<bool>> ChangePasswordAsync(ChangePasswordRequest request, Guid userId)
+        public async Task<Result<bool>> ChangePasswordAsync(ChangePasswordRequest request, Guid userId)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var user = await _userManager.FindByIdAsync(userId.ToString());
+                if (user == null)
+                    return Result<bool>.Failure(new Error("Auth.UserNotFound", "Kullanıcı bulunamadı."));
+
+                var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+                if (!result.Succeeded)
+                {
+                    var errorMsg = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return Result<bool>.Failure(new Error("Auth.ChangePasswordFailed", errorMsg));
+                }
+
+                // Diğer cihazları oturumdan çıkar (token rotation güvenliği)
+                await _refreshTokenRepository.RevokeUserTokensAsync(userId);
+                await _unitOfWork.SaveChangesAsync();
+
+                return Result<bool>.Success(true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ CHANGE PASSWORD EXCEPTION: {ex.Message}");
+                return Result<bool>.Failure(new Error("Auth.ChangePasswordFailed", "Şifre değiştirme sırasında bir hata oluştu."));
+            }
         }
 
         public Task<Result<bool>> ForgotPasswordAsync(ForgotPasswordRequest request)
@@ -174,9 +196,88 @@ namespace Chatter.Application.Services
             throw new NotImplementedException();
         }
 
-        public Task<Result<LoginResponse>> RefreshTokenAsync(RefreshTokenRequest request, JwtPayload jwt)
+        public async Task<Result<LoginResponse>> RefreshTokenAsync(RefreshTokenRequest request, JwtPayload jwt)
         {
-            throw new NotImplementedException();
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                // 1. Refresh token'ı DB'den bul
+                var storedToken = await _refreshTokenRepository.GetByTokenAsync(request.RefreshToken);
+                if (storedToken == null)
+                {
+                    return Result<LoginResponse>.Failure(new Error("Auth.InvalidRefreshToken", "Geçersiz refresh token."));
+                }
+
+                // 2. Token geçerlilik kontrolü
+                if (!storedToken.IsActive)
+                {
+                    return Result<LoginResponse>.Failure(new Error("Auth.InvalidRefreshToken", "Refresh token süresi dolmuş veya kullanılmış."));
+                }
+
+                // 3. JWT payload'daki kullanıcı ile refresh token sahibini eşleştir
+                string? jtiClaim = null;
+                if (jwt != null)
+                {
+                    if (jwt.TryGetValue("sub", out var subVal))
+                        jtiClaim = subVal?.ToString();
+                    else if (jwt.TryGetValue(ClaimTypes.NameIdentifier, out var nameIdVal))
+                        jtiClaim = nameIdVal?.ToString();
+                }
+
+                if (jtiClaim != null && Guid.TryParse(jtiClaim, out var jwtUserId))
+                {
+                    if (jwtUserId != storedToken.UserId)
+                    {
+                        return Result<LoginResponse>.Failure(new Error("Auth.TokenMismatch", "Token eşleşmesi başarısız."));
+                    }
+                }
+
+                // 4. Kullanıcıyı getir
+                var user = await _userRepository.GetByIdAsync(storedToken.UserId);
+                if (user == null || !user.IsActive)
+                {
+                    return Result<LoginResponse>.Failure(new Error("Auth.UserNotFound", "Kullanıcı bulunamadı veya hesap pasif."));
+                }
+
+                // 5. Eski token'ı kullanılmış olarak işaretle (token rotation)
+                var newRefreshTokenString = GenerateRefreshToken();
+                storedToken.ReplaceWith(newRefreshTokenString, null);
+
+                // 6. Yeni refresh token oluştur
+                var newRefreshTokenEntity = new RefreshToken
+                {
+                    Token = newRefreshTokenString,
+                    UserId = user.Id,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false,
+                    IsRevoked = false
+                };
+                await _refreshTokenRepository.AddAsync(newRefreshTokenEntity);
+
+                // 7. Yeni JWT üret
+                var newJwtToken = await GenerateJwtToken(user);
+
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
+                var response = new LoginResponse
+                {
+                    UserId = user.Id.ToString(),
+                    UserName = user.UserName!,
+                    Email = user.Email!,
+                    Token = newJwtToken,
+                    RefreshToken = newRefreshTokenString
+                };
+
+                return Result<LoginResponse>.Success(response);
+            }
+            catch (Exception ex)
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                Console.WriteLine($"❌ REFRESH TOKEN EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+                return Result<LoginResponse>.Failure(new Error("Auth.RefreshFailed", "Token yenileme sırasında bir hata oluştu."));
+            }
         }
 
         // ====== Private Helper Methods ======
