@@ -1,5 +1,6 @@
 using Chatter.Domain.Common;
 using Chatter.Domain.Enums;
+using Chatter.Domain.Common.Exceptions;
 
 namespace Chatter.Domain.Entities
 {
@@ -26,6 +27,10 @@ namespace Chatter.Domain.Entities
                 StartedAt = DateTime.UtcNow;
                 UpdatedAt = DateTime.UtcNow;
             }
+            else 
+            {
+                throw new CallException($"Çağrı kabul edilemedi. Çünkü çağrının mevcut durumu '{Status}', ancak sadece 'Ringing' (Çalıyor) durumundaki çağrılar kabul edilebilir.");
+            }
         }
 
         public void Decline()
@@ -36,6 +41,10 @@ namespace Chatter.Domain.Entities
                 EndedAt = DateTime.UtcNow;
                 UpdatedAt = DateTime.UtcNow;
             }
+            else 
+            {
+                throw new CallException($"Çağrı reddedilemedi. Çünkü çağrının mevcut durumu '{Status}', ancak sadece 'Ringing' (Çalıyor) durumundaki çağrılar reddedilebilir.");
+            }
         }
 
         public void MarkAsMissed()
@@ -45,6 +54,10 @@ namespace Chatter.Domain.Entities
                 Status = CallStatus.Missed;
                 EndedAt = DateTime.UtcNow;
                 UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                throw new CallException($"Çağrı cevapsız (missed) olarak işaretlenemedi. Çünkü çağrının mevcut durumu '{Status}', ancak sadece 'Ringing' (Çalıyor) durumundaki çağrılar bu duruma çekilebilir.");
             }
         }
 
@@ -61,6 +74,10 @@ namespace Chatter.Domain.Entities
                 }
                 
                 UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                throw new CallException($"Çağrı bitirilemedi. Çünkü çağrının mevcut durumu '{Status}', ancak sadece 'Ringing' (Çalıyor) veya 'Active' (Konuşmada) durumundaki çağrılar bitirilebilir.");
             }
         }
 

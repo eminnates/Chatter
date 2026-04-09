@@ -3,7 +3,6 @@ using Chatter.Domain.Common;
 
 namespace Chatter.Domain.Entities
 {
-    // DEĞİŞİKLİK BURADA: <Guid> ekledik.
     public class AppUser : IdentityUser<Guid> 
     {
         // ====== Profil Bilgileri ======
