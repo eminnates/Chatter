@@ -1,5 +1,6 @@
 using Chatter.Domain.Common;
 using Chatter.Domain.Enums;
+using Chatter.Domain.Common.Exceptions;
 
 namespace Chatter.Domain.Entities
 {
@@ -8,11 +9,8 @@ namespace Chatter.Domain.Entities
         public string? Name { get; set; }
         public ConversationType Type { get; set; } = ConversationType.OneToOne;
         public string? GroupImageUrl { get; set; }
-        
-        // DEĞİŞİKLİK: string? -> Guid?
         // Grubu oluşturan kişi null olabilir (sistem oluşturduysa) ama varsa Guid olmalı.
-        public Guid? CreatedByUserId { get; set; }
-        
+        public Guid? CreatedByUserId { get; set; }     
         public Guid? LastMessageId { get; set; }
         public bool IsActive { get; set; } = true;
 
@@ -36,6 +34,10 @@ namespace Chatter.Domain.Entities
                 Name = name;
                 UpdatedAt = DateTime.UtcNow;
             }
+            else
+            {
+                throw new ConversationException("Birebir (One-to-One) sohbetlerin ortak bir ismi olamaz. Sadece grup sohbetlerinin ismi değiştirilebilir.");
+            }
         }
 
         public void SetGroupImage(string imageUrl)
@@ -45,22 +47,34 @@ namespace Chatter.Domain.Entities
                 GroupImageUrl = imageUrl;
                 UpdatedAt = DateTime.UtcNow;
             }
+            else
+            {
+                throw new ConversationException("Birebir (One-to-One) sohbetlerin ortak bir resmi olamaz. Sadece grup sohbetlerine resim eklenebilir.");
+            }
         }
 
         public void Archive()
         {
-            IsActive = false;
-            UpdatedAt = DateTime.UtcNow;
+            if (LastMessageId.HasValue) 
+            {
+                IsActive = false;
+                UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                throw new ConversationException("İçerisinde hiç mesaj bulunmayan bir sohbet arşivlendi (archive) olarak işaretlenemez.");
+            }
         }
 
         public void Unarchive()
         {
-            IsActive = true;
-            UpdatedAt = DateTime.UtcNow;
+            if (!IsActive)
+            {
+                IsActive = true;
+                UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         public bool IsGroupConversation() => Type == ConversationType.Group;
-
-        public int GetParticipantCount() => Participants.Count(p => p.IsActive);
     }
 }
