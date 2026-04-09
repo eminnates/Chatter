@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Chatter.Domain.Common.Exceptions
 {
-    public class ConversationException : Exception
+    public class ConversationException : DomainException
     {
         public ConversationException(string message) : base(message) { }
     }
