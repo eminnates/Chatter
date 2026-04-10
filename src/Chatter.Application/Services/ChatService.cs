@@ -128,30 +128,24 @@ public class ChatService : IChatService
             }
 
             // 3. Mesajı Oluştur
-            var message = new Message
-            {
-                Id = Guid.NewGuid(),
-                ConversationId = conversation.Id,
-                SenderId = senderId,
-                Content = request.Content ?? (request.Attachment != null ? "" : string.Empty),
-                Type = request.Attachment != null ? (MessageType)request.Attachment.Type : MessageType.Text,
-                SentAt = DateTime.UtcNow,
-                Status = MessageStatus.Sent,
-                ReplyToMessageId = request.ReplyToMessageId
-            };
+            var messageType = request.Attachment != null ? (MessageType)request.Attachment.Type : MessageType.Text;
+            var message = new Message(
+                conversationId: conversation.Id,
+                senderId: senderId,
+                content: request.Content ?? (request.Attachment != null ? "" : string.Empty),
+                type: messageType,
+                replyToMessageId: request.ReplyToMessageId
+            ) { Id = Guid.NewGuid() };
 
             // EKLERİ KAYDET
             if (request.Attachment != null)
             {
-                var attachment = new MessageAttachment
-                {
-                    Id = Guid.NewGuid(),
-                    MessageId = message.Id,
-                    FileName = request.Attachment.FileName,
-                    FileUrl = request.Attachment.FileUrl,
-                    Type = (AttachmentType)request.Attachment.Type,
-                    UploadedAt = DateTime.UtcNow
-                };
+                var attachment = new MessageAttachment(
+                    messageId: message.Id,
+                    fileName: request.Attachment.FileName,
+                    fileUrl: request.Attachment.FileUrl,
+                    type: (AttachmentType)request.Attachment.Type
+                ) { Id = Guid.NewGuid() };
 
                 // KURALLARI İŞLETİYORUZ
                 attachment.SetMetadata(

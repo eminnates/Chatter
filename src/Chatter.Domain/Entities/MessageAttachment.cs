@@ -6,20 +6,37 @@ namespace Chatter.Domain.Entities
 {
     public class MessageAttachment : BaseEntity<Guid>
     {
-        public Guid MessageId { get; set; }
-        public string FileName { get; set; } = string.Empty;
-        public string FileUrl { get; set; } = string.Empty;
-        public AttachmentType Type { get; set; }
-        public long FileSize { get; set; }
-        public string? MimeType { get; set; }
-        public string? ThumbnailUrl { get; set; }
-        public int? Width { get; set; }
-        public int? Height { get; set; }
-        public int? Duration { get; set; } // Video/Audio süresi (saniye)
-        public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+        public Guid MessageId { get; private set; }
+        public string FileName { get; private set; } = string.Empty;
+        public string FileUrl { get; private set; } = string.Empty;
+        public AttachmentType Type { get; private set; }
+        public long FileSize { get; private set; }
+        public string? MimeType { get; private set; }
+        public string? ThumbnailUrl { get; private set; }
+        public int? Width { get; private set; }
+        public int? Height { get; private set; }
+        public int? Duration { get; private set; } // Video/Audio süresi (saniye)
+        public DateTime UploadedAt { get; private set; } = DateTime.UtcNow;
 
         // Navigation property
-        public virtual Message Message { get; set; } = null!;
+        public virtual Message Message { get; private set; } = null!;
+
+        // EF Core için parametresiz constructor
+        protected MessageAttachment() { }
+
+        public MessageAttachment(Guid messageId, string fileName, string fileUrl, AttachmentType type, string? thumbnailUrl = null)
+        {
+            if (messageId == Guid.Empty) throw new MessageAttachmentException("MessageId boş (Guid.Empty) olamaz.");
+            if (string.IsNullOrWhiteSpace(fileName)) throw new MessageAttachmentException("Dosya adı boş olamaz.");
+            if (string.IsNullOrWhiteSpace(fileUrl)) throw new MessageAttachmentException("Dosya adresi (URL) boş olamaz.");
+
+            MessageId = messageId;
+            FileName = fileName;
+            FileUrl = fileUrl;
+            Type = type;
+            ThumbnailUrl = thumbnailUrl;
+            UploadedAt = DateTime.UtcNow;
+        }
 
         // Domain methods
         public bool IsImage() => Type == AttachmentType.Image;

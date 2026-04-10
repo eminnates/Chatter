@@ -6,29 +6,47 @@ namespace Chatter.Domain.Entities
 {
     public class Message : BaseEntity<Guid>
     {
-        public Guid ConversationId { get; set; }
-        public Guid SenderId { get; set; } 
-        public string Content { get; set; } = string.Empty;
-        public MessageType Type { get; set; } = MessageType.Text;
-        public MessageStatus Status { get; set; } = MessageStatus.Sent;
-        public DateTime SentAt { get; set; } = DateTime.UtcNow;
-        public DateTime? DeliveredAt { get; set; }
-        public DateTime? ReadAt { get; set; }
-        public DateTime? EditedAt { get; set; }
+        public Guid ConversationId { get; private set; }
+        public Guid SenderId { get; private set; } 
+        public string Content { get; private set; } = string.Empty;
+        public MessageType Type { get; private set; } = MessageType.Text;
+        public MessageStatus Status { get; private set; } = MessageStatus.Sent;
+        public DateTime SentAt { get; private set; } = DateTime.UtcNow;
+        public DateTime? DeliveredAt { get; private set; }
+        public DateTime? ReadAt { get; private set; }
+        public DateTime? EditedAt { get; private set; }
         
         // Soft Delete (Veri tabanında kalır ama silindi görünür)
-        public bool IsDeleted { get; set; }
-        public DateTime? DeletedAt { get; set; }
+        public bool IsDeleted { get; private set; }
+        public DateTime? DeletedAt { get; private set; }
         
-        public Guid? ReplyToMessageId { get; set; }
+        public Guid? ReplyToMessageId { get; private set; }
 
         // Navigation properties
-        public virtual Conversation Conversation { get; set; } = null!;
-        public virtual AppUser Sender { get; set; } = null!;
-        public virtual Message? ReplyToMessage { get; set; }
-        public virtual ICollection<Message> Replies { get; set; } = new List<Message>();
-        public virtual ICollection<MessageAttachment> Attachments { get; set; } = new List<MessageAttachment>();
-        public virtual ICollection<MessageReaction> Reactions { get; set; } = new List<MessageReaction>();
+        public virtual Conversation Conversation { get; private set; } = null!;
+        public virtual AppUser Sender { get; private set; } = null!;
+        public virtual Message? ReplyToMessage { get; private set; }
+        public virtual ICollection<Message> Replies { get; private set; } = new List<Message>();
+        public virtual ICollection<MessageAttachment> Attachments { get; private set; } = new List<MessageAttachment>();
+        public virtual ICollection<MessageReaction> Reactions { get; private set; } = new List<MessageReaction>();
+
+        // EF Core için parametresiz constructor
+        protected Message() { }
+
+        public Message(Guid conversationId, Guid senderId, string content, MessageType type = MessageType.Text, Guid? replyToMessageId = null)
+        {
+            if (conversationId == Guid.Empty) throw new MessageException("Message oluşturmak için geçerli bir ConversationId gereklidir.");
+            if (senderId == Guid.Empty) throw new MessageException("Message oluşturmak için geçerli bir SenderId gereklidir.");
+
+            ConversationId = conversationId;
+            SenderId = senderId;
+            Content = content ?? string.Empty;
+            Type = type;
+            SentAt = DateTime.UtcNow;
+            Status = MessageStatus.Sent;
+            ReplyToMessageId = replyToMessageId;
+            IsDeleted = false;
+        }
 
         // Domain methods
         public void MarkAsDelivered()

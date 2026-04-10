@@ -493,15 +493,12 @@ public class ChatHub : Hub
             var callTypeText = callDto.Type == Domain.Enums.CallType.Video ? "Video call" : "Voice call";
             var declinerName = callDto.InitiatorId == userId ? "You" : "User";
             
-            var systemMessage = new Domain.Entities.Message
-            {
-                ConversationId = callDto.ConversationId,
-                SenderId = userId,
-                Content = $"{callTypeText} declined",
-                Type = Domain.Enums.MessageType.System,
-                Status = Domain.Enums.MessageStatus.Sent,
-                SentAt = DateTime.UtcNow
-            };
+            var systemMessage = new Domain.Entities.Message(
+                conversationId: callDto.ConversationId,
+                senderId: userId,
+                content: $"{callTypeText} declined",
+                type: Domain.Enums.MessageType.System
+            ) { Id = Guid.NewGuid() };
             
             await _unitOfWork.Messages.AddAsync(systemMessage);
             await _unitOfWork.SaveChangesAsync();
@@ -563,15 +560,12 @@ public class ChatHub : Hub
                     ? $"{durationMinutes}m {durationSeconds}s" 
                     : $"{durationSeconds}s";
                 
-                var systemMessage = new Domain.Entities.Message
-                {
-                    ConversationId = callDto.ConversationId,
-                    SenderId = userId,
-                    Content = $"{callTypeText} • {durationText}",
-                    Type = Domain.Enums.MessageType.System,
-                    Status = Domain.Enums.MessageStatus.Sent,
-                    SentAt = DateTime.UtcNow
-                };
+                var systemMessage = new Domain.Entities.Message(
+                    conversationId: callDto.ConversationId,
+                    senderId: userId,
+                    content: $"{callTypeText} • {durationText}",
+                    type: Domain.Enums.MessageType.System
+                ) { Id = Guid.NewGuid() };
                 
                 await _unitOfWork.Messages.AddAsync(systemMessage);
                 await _unitOfWork.SaveChangesAsync();
