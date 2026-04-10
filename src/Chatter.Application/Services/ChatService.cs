@@ -435,17 +435,12 @@ public class ChatService : IChatService
             if (existing.Emoji == emoji) 
                 return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
             
-            existing.Emoji = emoji;
+            existing.ChangeEmoji(emoji);
             await _unitOfWork.SaveChangesAsync();
             return Result<MessageReactionDto>.Success(new MessageReactionDto { UserId = userId, Emoji = emoji });
         }
 
-        var reaction = new MessageReaction
-        {
-            MessageId = messageId,
-            UserId = userId,
-            Emoji = emoji
-        };
+        var reaction = new MessageReaction(messageId, userId, emoji);
 
         await _unitOfWork.Messages.AddReactionAsync(reaction);
         await _unitOfWork.SaveChangesAsync();

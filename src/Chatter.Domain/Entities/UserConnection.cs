@@ -1,25 +1,35 @@
 using Chatter.Domain.Common;
+using Chatter.Domain.Common.Exceptions;
 
 namespace Chatter.Domain.Entities
 {
-    // DEĞİŞİKLİK 1: BaseEntity<int> -> BaseEntity<Guid>
     public class UserConnection : BaseEntity<Guid>
     {
-        // DEĞİŞİKLİK 2: string UserId -> Guid UserId
-        // AppUser ile ilişki için zorunlu.
-        public Guid UserId { get; set; }
-        
-        // DİKKAT: SignalR ID'leri string gelir, burası string kalmalı.
-        public string ConnectionId { get; set; } = string.Empty;
-        
-        public string? UserAgent { get; set; }
-        public string? IpAddress { get; set; }
-        public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
-        public DateTime? DisconnectedAt { get; set; }
-        public bool IsActive { get; set; } = true;
+        public Guid UserId { get; private set; }
+        public string ConnectionId { get; private set; } = string.Empty;
+        public string? UserAgent { get; private set; }
+        public string? IpAddress { get; private set; }
+        public DateTime ConnectedAt { get; private set; } = DateTime.UtcNow;
+        public DateTime? DisconnectedAt { get; private set; }
+        public bool IsActive { get; private set; } = true;
 
         // Navigation property
-        public virtual AppUser User { get; set; } = null!;
+        public virtual AppUser User { get; private set; } = null!;
+
+        protected UserConnection() { }
+
+        public UserConnection(Guid userId, string connectionId, string? userAgent, string? ipAddress)
+        {
+            if (userId == Guid.Empty) throw new UserConnectionException("Kullanıcı ID boş olamaz.");
+            if (string.IsNullOrWhiteSpace(connectionId)) throw new UserConnectionException("Bağlantı ID boş olamaz.");
+
+            UserId = userId;
+            ConnectionId = connectionId;
+            UserAgent = userAgent;
+            IpAddress = ipAddress;
+            ConnectedAt = DateTime.UtcNow;
+            IsActive = true;
+        }
 
         // Domain methods
         public void Disconnect()

@@ -119,15 +119,13 @@ namespace Chatter.Application.Services
                 var token = await GenerateJwtToken(user);
                 var refreshToken = GenerateRefreshToken();
                 
-                var refreshTokenEntity = new RefreshToken
-                {
-                    Token = refreshToken,
-                    UserId = user.Id,
-                    ExpiresAt = DateTime.UtcNow.AddDays(7),
-                    CreatedAt = DateTime.UtcNow,
-                    IsUsed = false,
-                    IsRevoked = false
-                };
+                var refreshTokenEntity = new RefreshToken(
+                    userId: user.Id,
+                    token: refreshToken,
+                    jwtId: Guid.NewGuid().ToString(), // Normalde JWT içindeki JTI claim'inin buraya verilmesi en doğrusudur.
+                    expiresAt: DateTime.UtcNow.AddDays(7),
+                    createdByIp: null
+                );
 
                 await _refreshTokenRepository.AddAsync(refreshTokenEntity);
 
@@ -244,15 +242,13 @@ namespace Chatter.Application.Services
                 storedToken.ReplaceWith(newRefreshTokenString, null);
 
                 // 6. Yeni refresh token oluştur
-                var newRefreshTokenEntity = new RefreshToken
-                {
-                    Token = newRefreshTokenString,
-                    UserId = user.Id,
-                    ExpiresAt = DateTime.UtcNow.AddDays(7),
-                    CreatedAt = DateTime.UtcNow,
-                    IsUsed = false,
-                    IsRevoked = false
-                };
+                var newRefreshTokenEntity = new RefreshToken(
+                    userId: user.Id,
+                    token: newRefreshTokenString,
+                    jwtId: Guid.NewGuid().ToString(), // JTI
+                    expiresAt: DateTime.UtcNow.AddDays(7),
+                    createdByIp: null
+                );
                 await _refreshTokenRepository.AddAsync(newRefreshTokenEntity);
 
                 // 7. Yeni JWT üret

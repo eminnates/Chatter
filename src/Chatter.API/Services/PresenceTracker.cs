@@ -130,15 +130,12 @@ public class PresenceAuditLogService : BackgroundService
 
                 if (log.IsConnected)
                 {
-                    var connection = new Chatter.Domain.Entities.UserConnection
-                    {
-                        UserId = log.UserId,
-                        ConnectionId = log.ConnectionId,
-                        UserAgent = log.UserAgent,
-                        IpAddress = log.IpAddress,
-                        ConnectedAt = log.Timestamp.UtcDateTime,
-                        IsActive = true
-                    };
+                    var connection = new Chatter.Domain.Entities.UserConnection(
+                        userId: log.UserId,
+                        connectionId: log.ConnectionId,
+                        userAgent: log.UserAgent,
+                        ipAddress: log.IpAddress
+                    );
                     await unitOfWork.UserConnections.AddAsync(connection);
                     
                     var user = await unitOfWork.Users.GetByIdAsync(log.UserId);
