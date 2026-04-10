@@ -48,34 +48,17 @@ namespace Chatter.Application.Services
                 
                 if (conversation == null)
                 {
-                    conversation = new Conversation
-                    {
-                        Type = ConversationType.OneToOne,
-                        CreatedAt = DateTime.UtcNow,
-                        IsActive = true
-                    };
-
+                    conversation = new Conversation(type: ConversationType.OneToOne);
                     await _unitOfWork.Conversations.AddAsync(conversation);
                     
-                    var participants = new List<ConversationParticipant>
-                    {
-                        new ConversationParticipant(conversationId: conversation.Id, userId: initiatorId, role: ParticipantRole.Member),
-                        new ConversationParticipant(conversationId: conversation.Id, userId: request.ReceiverId, role: ParticipantRole.Member)
-                    };
+                    conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: initiatorId, role: ParticipantRole.Member));
+                    conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: request.ReceiverId, role: ParticipantRole.Member));
                     
-                    conversation.Participants = participants;
                     await _unitOfWork.SaveChangesAsync();
                 }
 
                 // Create call
-                var call = new Call
-                {
-                    ConversationId = conversation.Id,
-                    InitiatorId = initiatorId,
-                    Type = request.Type,
-                    Status = CallStatus.Ringing,
-                    CreatedAt = DateTime.UtcNow
-                };
+                var call = new Call(conversationId: conversation.Id, initiatorId: initiatorId, type: request.Type);
 
                 await _unitOfWork.Calls.AddAsync(call);
                 await _unitOfWork.SaveChangesAsync();
@@ -89,7 +72,7 @@ namespace Chatter.Application.Services
                     var user = await _unitOfWork.Users.GetByIdAsync(initiatorId);
                     if (user != null)
                     {
-                        callWithDetails.Initiator = user;
+                        callWithDetails.SetInitiator(user);
                     }
                 }
                 

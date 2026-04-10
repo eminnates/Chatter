@@ -6,17 +6,31 @@ namespace Chatter.Domain.Entities
 {
     public class Call : BaseEntity<Guid>
     {
-        public Guid ConversationId { get; set; }
-        public Guid InitiatorId { get; set; }
-        public CallType Type { get; set; }
-        public CallStatus Status { get; set; } = CallStatus.Ringing;
-        public DateTime? StartedAt { get; set; }
-        public DateTime? EndedAt { get; set; }
-        public int? DurationInSeconds { get; set; }
+        public Guid ConversationId { get; private set; }
+        public Guid InitiatorId { get; private set; }
+        public CallType Type { get; private set; }
+        public CallStatus Status { get; private set; } = CallStatus.Ringing;
+        public DateTime? StartedAt { get; private set; }
+        public DateTime? EndedAt { get; private set; }
+        public int? DurationInSeconds { get; private set; }
 
         // Navigation properties
-        public virtual Conversation Conversation { get; set; } = null!;
-        public virtual AppUser Initiator { get; set; } = null!;
+        public virtual Conversation Conversation { get; private set; } = null!;
+        public virtual AppUser Initiator { get; private set; } = null!;
+
+        // EF Core için parametresiz constructor
+        protected Call() { }
+
+        public Call(Guid conversationId, Guid initiatorId, CallType type)
+        {
+            if (conversationId == Guid.Empty) throw new CallException("Geçerli bir sohbet kimliği (ConversationId) gereklidir.");
+            if (initiatorId == Guid.Empty) throw new CallException("Geçerli bir arayan kişi (InitiatorId) gereklidir.");
+
+            ConversationId = conversationId;
+            InitiatorId = initiatorId;
+            Type = type;
+            Status = CallStatus.Ringing;
+        }
 
         // Domain methods
         public void Accept()
@@ -86,6 +100,11 @@ namespace Chatter.Domain.Entities
             Status = CallStatus.Failed;
             EndedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void SetInitiator(AppUser initiator)
+        {
+            Initiator = initiator ?? throw new CallException("Arayan kişi (Initiator) bilgisi boş olamaz.");
         }
     }
 }

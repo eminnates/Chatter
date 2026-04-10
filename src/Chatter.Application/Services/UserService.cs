@@ -180,11 +180,8 @@ public class UserService : IUserService
             }
 
             // Profil bilgilerini güncelle
-            user.FullName = request.FullName;
             user.UserName = request.UserName;
-            user.Bio = request.Bio;
-            user.ProfilePictureUrl = request.ProfilePictureUrl;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdateProfile(fullName: request.FullName, bio: request.Bio, profilePictureUrl: request.ProfilePictureUrl);
 
             // Güncellemeyi kaydet
             await _unitOfWork.Users.UpdateAsync(user);
@@ -224,8 +221,7 @@ public class UserService : IUserService
                 return Result<bool>.Failure(new Error("User.NotFound", "Kullanıcı bulunamadı."));
             }
 
-            user.FcmToken = fcmToken;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.SetFcmToken(fcmToken);
 
             await _unitOfWork.Users.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();

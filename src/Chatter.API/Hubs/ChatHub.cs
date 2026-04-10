@@ -156,7 +156,7 @@ public class ChatHub : Hub
             if (user != null)
             {
                 user.SetOnlineStatus(false);
-                user.LastSeenAt = DateTime.UtcNow;
+                user.UpdateLastSeen();
                 await _unitOfWork.SaveChangesAsync();
                 
                 // End any active calls

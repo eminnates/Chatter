@@ -66,12 +66,7 @@ namespace Chatter.Infrastructure.Repositories
 
             foreach (var call in activeCalls)
             {
-                call.Status = CallStatus.Ended;
-                call.EndedAt = DateTime.UtcNow;
-                if (call.StartedAt.HasValue)
-                {
-                    call.DurationInSeconds = (int)(DateTime.UtcNow - call.StartedAt.Value).TotalSeconds;
-                }
+                call.End();
             }
 
             return activeCalls.Count;

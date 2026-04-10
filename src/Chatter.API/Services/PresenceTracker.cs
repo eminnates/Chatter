@@ -155,7 +155,7 @@ public class PresenceAuditLogService : BackgroundService
                         if (user != null)
                         {
                             user.SetOnlineStatus(false);
-                            user.LastSeenAt = DateTime.UtcNow;
+                            user.UpdateLastSeen();
                         }
                     }
                 }

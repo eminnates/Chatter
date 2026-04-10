@@ -85,23 +85,11 @@ public class ChatService : IChatService
                 
                 if (conversation == null)
                 {
-                    conversation = new Conversation
-                    {
-                        Id = Guid.NewGuid(),
-                        Type = ConversationType.OneToOne,
-                        CreatedAt = DateTime.UtcNow,
-                        IsActive = true
-                    };
-
+                    conversation = new Conversation(type: ConversationType.OneToOne) { Id = Guid.NewGuid() };
                     await _unitOfWork.Conversations.AddAsync(conversation);
                     
-                    var participants = new List<ConversationParticipant>
-                    {
-                        new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member),
-                        new ConversationParticipant(conversationId: conversation.Id, userId: receiverGuid, role: ParticipantRole.Member)
-                    };
-                    
-                    conversation.Participants = participants;
+                    conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member));
+                    conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: receiverGuid, role: ParticipantRole.Member));
                 }
             }
 
@@ -162,8 +150,7 @@ public class ChatService : IChatService
             await _unitOfWork.Messages.AddAsync(message);
             
             // 4. Konuşma Bilgilerini Güncelle
-            conversation.LastMessageId = message.Id;
-            conversation.UpdatedAt = DateTime.UtcNow;
+            conversation.UpdateLastMessage(message);
             
             if (conversation.Participants != null)
             {
@@ -328,19 +315,10 @@ public class ChatService : IChatService
         if (existing != null) 
             return Result<Guid>.Success(existing.Id);
 
-        var conversation = new Conversation
-        {
-            Type = ConversationType.OneToOne,
-            CreatedAt = DateTime.UtcNow,
-            IsActive = true
-        };
-
-        var participants = new List<ConversationParticipant>
-        {
-            new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member),
-            new ConversationParticipant(conversationId: conversation.Id, userId: receiverId, role: ParticipantRole.Member)
-        };
-        conversation.Participants = participants;
+        var conversation = new Conversation(type: ConversationType.OneToOne);
+        
+        conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member));
+        conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: receiverId, role: ParticipantRole.Member));
 
         await _unitOfWork.Conversations.AddAsync(conversation);
         await _unitOfWork.SaveChangesAsync();

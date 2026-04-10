@@ -53,15 +53,13 @@ namespace Chatter.Application.Services
                 }
 
                 // 2. Kullanıcı Oluşturma
-                var user = new AppUser
+                var user = new AppUser(
+                    userName: request.UserName,
+                    email: request.Email,
+                    fullName: request.FullName ?? request.UserName
+                )
                 {
-                    UserName = request.UserName,
-                    Email = request.Email,
-                    FullName = request.FullName ?? request.UserName,
-                    EmailConfirmed = false,
-                    IsActive = true,
-                    IsOnline = false,
-                    CreatedAt = DateTime.UtcNow
+                    EmailConfirmed = false
                 };
 
                 var result = await _userManager.CreateAsync(user, request.Password);
