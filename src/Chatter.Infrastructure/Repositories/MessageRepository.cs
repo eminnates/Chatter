@@ -32,7 +32,6 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
             .ToListAsync(cancellationToken);
     }
 
-    // DÜZELTME: string userId -> Guid userId
     public async Task<IEnumerable<Message>> GetUnreadMessagesAsync(Guid conversationId, Guid userId, CancellationToken cancellationToken = default)
     {
         var participant = await _context.ConversationParticipants
@@ -122,33 +121,6 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
                 .ThenInclude(r => r.User)
             .Include(m => m.ReplyToMessage)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
-    }
-
-    // DÜZELTME: string userId -> Guid userId
-    public async Task<bool> CanUserEditMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        // FindAsync object array alır ama bizim ID'miz Guid. 
-        // EF Core bunu otomatik map eder.
-        var message = await _dbSet.FindAsync(new object[] { messageId }, cancellationToken);
-        return message != null && message.CanBeEdited(userId);
-    }
-
-    // DÜZELTME: string userId -> Guid userId
-    public async Task<bool> CanUserDeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        var message = await _dbSet
-            .Include(m => m.Conversation)
-                .ThenInclude(c => c.Participants)
-            .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
-
-        if (message == null || !message.CanBeDeleted(userId)) return false;
-
-        // Kendi mesajını silebilir
-        if (message.SenderId == userId) return true;
-
-        // Veya Admin/Owner silebilir
-        var participant = message.Conversation.Participants.FirstOrDefault(p => p.UserId == userId);
-        return participant?.Role is ParticipantRole.Admin or ParticipantRole.Owner;
     }
 
     public async Task<MessageReaction?> GetReactionAsync(Guid messageId, Guid userId, string emoji, CancellationToken cancellationToken = default)

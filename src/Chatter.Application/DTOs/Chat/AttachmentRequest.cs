@@ -8,6 +8,8 @@ public class AttachmentRequest
     public string FileUrl { get; set; } = string.Empty;
     public long FileSize { get; set; }
     public string? MimeType { get; set; }
-    // MessageAttachment.Type (AttachmentType Enum) için:
-    public int Type { get; set; } 
+    public int Type { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    public int? Duration { get; set; } // Video/Audio süresi için saniye
 }

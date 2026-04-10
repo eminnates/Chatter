@@ -1,14 +1,12 @@
 using Chatter.Domain.Common;
+using Chatter.Domain.Common.Exceptions;
 using Chatter.Domain.Enums;
 
 namespace Chatter.Domain.Entities
 {
-    // BaseEntity<Guid> olması doğru, çünkü bu tablonun ID'si de Guid olsun.
     public class MessageAttachment : BaseEntity<Guid>
     {
-        // Message tablosunun ID'si Guid olduğu için burası da Guid olmalı.
         public Guid MessageId { get; set; }
-        
         public string FileName { get; set; } = string.Empty;
         public string FileUrl { get; set; } = string.Empty;
         public AttachmentType Type { get; set; }
@@ -32,6 +30,20 @@ namespace Chatter.Domain.Entities
         
         public bool IsDocument() => Type == AttachmentType.Document;
 
+        public void SetMetadata(long fileSize, string? mimeType, int? width, int? height, int? duration)
+        {
+            if (IsDocument() && (duration.HasValue || width.HasValue || height.HasValue))
+                throw new MessageAttachmentException("Belge formalarındaki eklerin süre veya çözünürlük bilgisi olamaz.");
+
+            if (IsAudio() && (width.HasValue || height.HasValue))
+                throw new MessageAttachmentException("Ses dosyalarının çözünürlük bilgisi olamaz.");
+
+            FileSize = fileSize;
+            MimeType = mimeType;
+            Width = width;
+            Height = height;
+            Duration = duration;
+        }
         public string GetFileSizeFormatted()
         {
             string[] sizes = { "B", "KB", "MB", "GB" };

@@ -8,4 +8,9 @@ public class MessageAttachmentDto
     public string FileName { get; set; } = string.Empty;
     public long FileSize { get; set; }
     public string? Type { get; set; }
+    
+    public string? FileSizeFormatted { get; set; }
+    public string? DurationFormatted { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
 }

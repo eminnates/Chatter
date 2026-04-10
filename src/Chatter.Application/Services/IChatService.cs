@@ -1,4 +1,4 @@
-using Chatter.Application.Common; // Result sınıfının olduğu namespace
+using Chatter.Application.Common;
 using Chatter.Application.DTOs.Chat;
 
 namespace Chatter.Application.Services;

@@ -150,10 +150,18 @@ public class ChatService : IChatService
                     FileName = request.Attachment.FileName,
                     FileUrl = request.Attachment.FileUrl,
                     Type = (AttachmentType)request.Attachment.Type,
-                    FileSize = request.Attachment.FileSize,
-                    MimeType = request.Attachment.MimeType,
                     UploadedAt = DateTime.UtcNow
                 };
+
+                // KURALLARI İŞLETİYORUZ
+                attachment.SetMetadata(
+                    fileSize: request.Attachment.FileSize,
+                    mimeType: request.Attachment.MimeType,
+                    width: request.Attachment.Width,
+                    height: request.Attachment.Height,
+                    duration: request.Attachment.Duration
+                );
+
                 message.Attachments.Add(attachment);
             }
 
@@ -190,7 +198,11 @@ public class ChatService : IChatService
                     FileName = a.FileName,
                     FileUrl = a.FileUrl,
                     Type = a.Type.ToString(),
-                    FileSize = a.FileSize
+                    FileSize = a.FileSize,
+                    FileSizeFormatted = a.GetFileSizeFormatted(),
+                    DurationFormatted = a.GetDurationFormatted(),
+                    Width = a.Width,
+                    Height = a.Height
                 }).ToList(),
                 ClientMessageId = request.ClientMessageId
             };
@@ -235,7 +247,11 @@ public class ChatService : IChatService
                 FileUrl = a.FileUrl,
                 FileName = a.FileName,
                 Type = a.Type.ToString(),
-                FileSize = a.FileSize
+                FileSize = a.FileSize,
+                FileSizeFormatted = a.GetFileSizeFormatted(),
+                DurationFormatted = a.GetDurationFormatted(),
+                Width = a.Width,
+                Height = a.Height
             }).ToList(),
             Reactions = m.Reactions?.Select(r => new MessageReactionDto
             {
@@ -471,7 +487,11 @@ public class ChatService : IChatService
                     FileName = a.FileName,
                     FileUrl = a.FileUrl,
                     Type = a.Type.ToString(),
-                    FileSize = a.FileSize
+                    FileSize = a.FileSize,
+                    FileSizeFormatted = a.GetFileSizeFormatted(),
+                    DurationFormatted = a.GetDurationFormatted(),
+                    Width = a.Width,
+                    Height = a.Height
                 }).ToList(),
                 Reactions = m.Reactions?.Select(r => new MessageReactionDto
                 {
