@@ -343,10 +343,7 @@ public class ChatService : IChatService
         if (message == null)
             return Result<MessageDto>.Failure(new Error("Chat.NotFound", "Mesaj bulunamadı."));
 
-        if (message.SenderId != userId)
-            return Result<MessageDto>.Failure(new Error("Chat.EditDenied", "Bu mesajı düzenleme yetkiniz yok."));
-
-        message.Edit(newContent);
+        message.Edit(userId, newContent);
         
         _unitOfWork.Messages.Update(message);
         await _unitOfWork.SaveChangesAsync();

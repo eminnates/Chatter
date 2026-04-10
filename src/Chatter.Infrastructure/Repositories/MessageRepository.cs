@@ -130,9 +130,7 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
         // FindAsync object array alır ama bizim ID'miz Guid. 
         // EF Core bunu otomatik map eder.
         var message = await _dbSet.FindAsync(new object[] { messageId }, cancellationToken);
-        
-        // message.SenderId (Guid) == userId (Guid)
-        return message != null && message.SenderId == userId && message.CanBeEdited();
+        return message != null && message.CanBeEdited(userId);
     }
 
     // DÜZELTME: string userId -> Guid userId
@@ -143,7 +141,7 @@ public class MessageRepository : GenericRepository<Message, Guid>, IMessageRepos
                 .ThenInclude(c => c.Participants)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
 
-        if (message == null || !message.CanBeDeleted()) return false;
+        if (message == null || !message.CanBeDeleted(userId)) return false;
 
         // Kendi mesajını silebilir
         if (message.SenderId == userId) return true;
