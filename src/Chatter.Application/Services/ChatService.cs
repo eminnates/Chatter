@@ -97,8 +97,8 @@ public class ChatService : IChatService
                     
                     var participants = new List<ConversationParticipant>
                     {
-                        new() { ConversationId = conversation.Id, UserId = senderId, Role = ParticipantRole.Member },
-                        new() { ConversationId = conversation.Id, UserId = receiverGuid, Role = ParticipantRole.Member }
+                        new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member),
+                        new ConversationParticipant(conversationId: conversation.Id, userId: receiverGuid, role: ParticipantRole.Member)
                     };
                     
                     conversation.Participants = participants;
@@ -169,7 +169,7 @@ public class ChatService : IChatService
             {
                 foreach (var participant in conversation.Participants.Where(p => p.UserId != senderId))
                 {
-                    participant.UnreadCount++;
+                    participant.IncrementUnreadCount();
                 }
             }
 
@@ -315,8 +315,7 @@ public class ChatService : IChatService
         
         if (participant != null)
         {
-            participant.UnreadCount = 0;
-            participant.LastReadAt = DateTime.UtcNow;
+            participant.MarkAsRead(DateTime.UtcNow);
             await _unitOfWork.SaveChangesAsync();
         }
 
@@ -333,13 +332,15 @@ public class ChatService : IChatService
         {
             Type = ConversationType.OneToOne,
             CreatedAt = DateTime.UtcNow,
-            IsActive = true,
-            Participants = new List<ConversationParticipant>
-            {
-                new() { UserId = senderId, Role = ParticipantRole.Member },
-                new() { UserId = receiverId, Role = ParticipantRole.Member }
-            }
+            IsActive = true
         };
+
+        var participants = new List<ConversationParticipant>
+        {
+            new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member),
+            new ConversationParticipant(conversationId: conversation.Id, userId: receiverId, role: ParticipantRole.Member)
+        };
+        conversation.Participants = participants;
 
         await _unitOfWork.Conversations.AddAsync(conversation);
         await _unitOfWork.SaveChangesAsync();

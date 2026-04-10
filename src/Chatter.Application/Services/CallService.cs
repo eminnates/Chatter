@@ -59,8 +59,8 @@ namespace Chatter.Application.Services
                     
                     var participants = new List<ConversationParticipant>
                     {
-                        new() { ConversationId = conversation.Id, UserId = initiatorId, Role = ParticipantRole.Member },
-                        new() { ConversationId = conversation.Id, UserId = request.ReceiverId, Role = ParticipantRole.Member }
+                        new ConversationParticipant(conversationId: conversation.Id, userId: initiatorId, role: ParticipantRole.Member),
+                        new ConversationParticipant(conversationId: conversation.Id, userId: request.ReceiverId, role: ParticipantRole.Member)
                     };
                     
                     conversation.Participants = participants;

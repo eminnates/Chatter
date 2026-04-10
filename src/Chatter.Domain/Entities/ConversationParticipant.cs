@@ -6,19 +6,36 @@ namespace Chatter.Domain.Entities
 {
     public class ConversationParticipant : BaseEntity<Guid>
     {
-        public Guid ConversationId { get; set; }
-        public Guid UserId { get; set; }
-        public ParticipantRole Role { get; set; } = ParticipantRole.Member;
-        public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
-        public DateTime? LeftAt { get; set; }
-        public bool IsActive { get; set; } = true;
-        public bool IsMuted { get; set; }
-        public DateTime? LastReadAt { get; set; }
-        public int UnreadCount { get; set; }
+        public Guid ConversationId { get; private set; }
+        public Guid UserId { get; private set; }
+        public ParticipantRole Role { get; private set; } = ParticipantRole.Member;
+        public DateTime JoinedAt { get; private set; } = DateTime.UtcNow;
+        public DateTime? LeftAt { get; private set; }
+        public bool IsActive { get; private set; } = true;
+        public bool IsMuted { get; private set; }
+        public DateTime? LastReadAt { get; private set; }
+        public int UnreadCount { get; private set; }
 
         // Navigation properties
-        public virtual Conversation Conversation { get; set; } = null!;
-        public virtual AppUser User { get; set; } = null!;
+        public virtual Conversation Conversation { get; private set; } = null!;
+        public virtual AppUser User { get; private set; } = null!;
+
+        // EF Core için parametresiz constructor
+        protected ConversationParticipant() { }
+
+        public ConversationParticipant(Guid conversationId, Guid userId, ParticipantRole role = ParticipantRole.Member)
+        {
+            if (conversationId == Guid.Empty) throw new ConversationException("ConversationParticipant oluşturmak için geçerli bir ConversationId gereklidir.");
+            if (userId == Guid.Empty) throw new ConversationException("ConversationParticipant oluşturmak için geçerli bir UserId gereklidir.");
+
+            ConversationId = conversationId;
+            UserId = userId;
+            Role = role;
+            JoinedAt = DateTime.UtcNow;
+            IsActive = true;
+            IsMuted = false;
+            UnreadCount = 0;
+        }
 
         // Domain methods
         public void Leave()
