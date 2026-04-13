@@ -1,5 +1,6 @@
 using Chatter.Application.Common;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Frozen;
 
 namespace Chatter.API.Controllers;
 
@@ -8,8 +9,13 @@ namespace Chatter.API.Controllers;
 public class FilesController : BaseApiController
 {
     private readonly IWebHostEnvironment _env;
-    // İzin verilen dosya uzantıları (Güvenlik için)
-    private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".docx", ".zip", ".mp3", ".mp4", ".mov", ".webm", ".avi" };
+    
+    // O(1) hızında, allocate etmeyen yapı (OrdinalIgnoreCase ile ToLowerInvariant'tan kurtuluruz)
+    private static readonly FrozenSet<string> _allowedExtensions = new[] 
+    { 
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".docx", ".zip", ".mp3", ".mp4", ".mov", ".webm", ".avi" 
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     // Maksimum dosya boyutu (50MB - video desteği için)
     private const long MaxFileSize = 50 * 1024 * 1024;
 
@@ -36,9 +42,9 @@ public class FilesController : BaseApiController
                 return HandleResult(Result<object>.Failure(new Error("File.TooLarge", "Dosya boyutu 10MB sınırını aşamaz.")));
             }
 
-            // 3. Uzantı kontrolü
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!_allowedExtensions.Contains(extension))
+            // 3. Uzantı kontrolü (ToLowerInvariant kaldırıldı, yeni string tahsis edilmiyor)
+            var extension = Path.GetExtension(file.FileName);
+            if (!_allowedExtensions.Contains(extension ?? string.Empty))
             {
                 return HandleResult(Result<object>.Failure(new Error("File.InvalidType", "Bu dosya türünün yüklenmesine izin verilmiyor.")));
             }
@@ -98,8 +104,10 @@ public class FilesController : BaseApiController
     {
         try
         {
-            // Güvenlik: Path traversal saldırılarını önle
-            if (fileName.Contains("..") || fileName.Contains("/") || fileName.Contains("\\"))
+            // Güvenlik: Span kullanarak string allocation olmadan (Zero-Allocation) path traversal kontrolü
+            ReadOnlySpan<char> fileNameSpan = fileName.AsSpan();
+            if (fileNameSpan.Contains("..", StringComparison.Ordinal) || 
+                fileNameSpan.IndexOfAny('/', '\\') >= 0)
             {
                 return BadRequest("Geçersiz dosya adı.");
             }
@@ -112,36 +120,43 @@ public class FilesController : BaseApiController
                 return NotFound("Dosya bulunamadı.");
             }
 
-            // MIME type belirle
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            var contentType = extension switch
-            {
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                ".webp" => "image/webp",
-                ".pdf" => "application/pdf",
-                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ".zip" => "application/zip",
-                ".mp3" => "audio/mpeg",
-                ".mp4" => "video/mp4",
-                ".mov" => "video/quicktime",
-                ".webm" => "video/webm",
-                ".avi" => "video/x-msvideo",
-                _ => "application/octet-stream"
-            };
+            // MIME type belirle (string yerine tahsisatsız ReadOnlySpan kullanıldı)
+            ReadOnlySpan<char> extension = Path.GetExtension(fileNameSpan);
+            var contentType = GetContentType(extension);
 
             // CORS headers for cross-origin image loading
             Response.Headers.Append("Access-Control-Allow-Origin", "*");
             Response.Headers.Append("Access-Control-Allow-Methods", "GET");
             Response.Headers.Append("Cache-Control", "public, max-age=31536000");
 
-            var fileBytes = System.IO.File.ReadAllBytes(filePath);
-            return File(fileBytes, contentType);
+            // KRİTİK PERFORMANS İYİLEŞTİRMESİ:
+            // Kötü Kod: System.IO.File.ReadAllBytes(filePath); 50MB dosyayı belleğe yükleyip GC'yi patlatıyordu.
+            // İyi Kod: İşletim sistemi seviyesinde "Zero-Copy" / "Stream" ile byte'ları ağdan doğrudan gönder.
+            return PhysicalFile(filePath, contentType);
         }
         catch (Exception ex)
         {
             return StatusCode(500, $"Dosya okunurken hata: {ex.Message}");
         }
+    }
+
+    // Allocation (bellek sarfiyatı) yapmadan uzantıya bakıp ContentType dönen yardımcı metot
+    private static string GetContentType(ReadOnlySpan<char> extension)
+    {
+        if (extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || 
+            extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)) return "image/jpeg";
+        if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase)) return "image/png";
+        if (extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)) return "image/gif";
+        if (extension.Equals(".webp", StringComparison.OrdinalIgnoreCase)) return "image/webp";
+        if (extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)) return "application/pdf";
+        if (extension.Equals(".docx", StringComparison.OrdinalIgnoreCase)) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)) return "application/zip";
+        if (extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase)) return "audio/mpeg";
+        if (extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase)) return "video/mp4";
+        if (extension.Equals(".mov", StringComparison.OrdinalIgnoreCase)) return "video/quicktime";
+        if (extension.Equals(".webm", StringComparison.OrdinalIgnoreCase)) return "video/webm";
+        if (extension.Equals(".avi", StringComparison.OrdinalIgnoreCase)) return "video/x-msvideo";
+        
+        return "application/octet-stream";
     }
 }

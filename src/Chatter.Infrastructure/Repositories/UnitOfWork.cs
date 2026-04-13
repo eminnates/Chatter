@@ -137,8 +137,6 @@ public class UnitOfWork : IUnitOfWork
     public void Dispose()
     {
         _transaction?.Dispose();
-        _context.Dispose();
-        // İyi bir pratik olarak Finalizer'ı susturuyoruz
-        GC.SuppressFinalize(this); 
+        GC.SuppressFinalize(this);
     }
 }

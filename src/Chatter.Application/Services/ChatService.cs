@@ -22,38 +22,8 @@ public class ChatService : IChatService
         if (message == null)
             return Result<MessageDto?>.Success(null);
 
-        var replyDto = message.ReplyToMessage != null ? new ReplyMessageDto
-        {
-            Id = message.ReplyToMessage.Id,
-            SenderId = message.ReplyToMessage.SenderId,
-            SenderName = message.ReplyToMessage.Sender?.FullName ?? message.ReplyToMessage.Sender?.UserName ?? string.Empty,
-            Content = message.ReplyToMessage.Content
-        } : null;
-
-        var dto = new MessageDto
-        {
-            Id = message.Id,
-            ConversationId = message.ConversationId,
-            SenderId = message.SenderId,
-            SenderName = message.Sender?.FullName ?? message.Sender?.UserName ?? "Unknown",
-            Content = message.Content,
-            Type = message.Type.ToString(),
-            SentAt = message.SentAt,
-            IsRead = message.Status == MessageStatus.Read,
-            ReplyToMessageId = message.ReplyToMessageId,
-            ReplyMessage = replyDto,
-            Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
-            {
-                FileName = a.FileName,
-                FileUrl = a.FileUrl,
-                Type = a.Type.ToString()
-            }).ToList(),
-            Reactions = message.Reactions?.Select(r => new MessageReactionDto
-            {
-                UserId = r.UserId,
-                Emoji = r.Emoji
-            }).ToList() ?? new List<MessageReactionDto>()
-        };
+        var dto = MapToMessageDto(message);
+        
         return Result<MessageDto?>.Success(dto);
     }
 
@@ -164,29 +134,13 @@ public class ChatService : IChatService
             await _unitOfWork.SaveChangesAsync();
 
             // 5. DTO DÖNDÜR
-            var messageDto = new MessageDto
+            var messageDto = MapToMessageDto(message, request.ClientMessageId);
+            
+            // Eğer Reply fetch optimize edildiyse Set ediyoruz (Veritabanındaki mapping içinde olmadığı için extra set ediyoruz)
+            if (replyDto != null && messageDto.ReplyMessage == null)
             {
-                Id = message.Id,
-                ConversationId = conversation.Id,
-                SenderId = senderId,
-                SenderName = senderName, 
-                Content = message.Content,
-                SentAt = message.SentAt,
-                IsRead = false,
-                ReplyToMessageId = message.ReplyToMessageId,
-                ReplyMessage = replyDto,
-                Attachments = message.Attachments.Select(a => new MessageAttachmentDto {
-                    FileName = a.FileName,
-                    FileUrl = a.FileUrl,
-                    Type = a.Type.ToString(),
-                    FileSize = a.FileSize,
-                    FileSizeFormatted = a.GetFileSizeFormatted(),
-                    DurationFormatted = a.GetDurationFormatted(),
-                    Width = a.Width,
-                    Height = a.Height
-                }).ToList(),
-                ClientMessageId = request.ClientMessageId
-            };
+                messageDto.ReplyMessage = replyDto;
+            }
 
             return Result<MessageDto>.Success(messageDto);
         }
@@ -205,41 +159,7 @@ public class ChatService : IChatService
 
         var messages = await _unitOfWork.Messages.GetConversationMessagesAsync(conversationId, pageNumber, pageSize);
         
-        var dtos = messages.Select(m => new MessageDto
-        {
-            Id = m.Id,
-            ConversationId = m.ConversationId,
-            SenderId = m.SenderId,
-            SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? "Unknown",
-            Content = m.Content,
-            Type = m.Type.ToString(),
-            SentAt = m.SentAt,
-            IsRead = m.Status == MessageStatus.Read,
-            ReplyToMessageId = m.ReplyToMessageId,
-            ReplyMessage = m.ReplyToMessage != null ? new ReplyMessageDto
-            {
-                Id = m.ReplyToMessage.Id,
-                SenderId = m.ReplyToMessage.SenderId,
-                SenderName = m.ReplyToMessage.Sender?.FullName ?? m.ReplyToMessage.Sender?.UserName ?? string.Empty,
-                Content = m.ReplyToMessage.Content
-            } : null,
-            EditedAt = m.EditedAt,
-            Attachments = m.Attachments.Select(a => new MessageAttachmentDto {
-                FileUrl = a.FileUrl,
-                FileName = a.FileName,
-                Type = a.Type.ToString(),
-                FileSize = a.FileSize,
-                FileSizeFormatted = a.GetFileSizeFormatted(),
-                DurationFormatted = a.GetDurationFormatted(),
-                Width = a.Width,
-                Height = a.Height
-            }).ToList(),
-            Reactions = m.Reactions?.Select(r => new MessageReactionDto
-            {
-                UserId = r.UserId,
-                Emoji = r.Emoji
-            }).ToList() ?? new List<MessageReactionDto>()
-        });
+        var dtos = messages.Select(m => MapToMessageDto(m));
 
         return Result<IEnumerable<MessageDto>>.Success(dtos);
     }
@@ -260,24 +180,7 @@ public class ChatService : IChatService
                 Id = c.Id,
                 Name = c.Type == ConversationType.Group ? c.Name : (otherParticipant?.FullName ?? "Unknown"),
                 ImageUrl = c.Type == ConversationType.Group ? c.GroupImageUrl : otherParticipant?.ProfilePictureUrl,
-                LastMessage = c.LastMessage != null ? new MessageDto 
-                {
-                    Id = c.LastMessage.Id,
-                    ConversationId = c.Id,
-                    SenderId = c.LastMessage.SenderId,
-                    SenderName = c.LastMessage.Sender?.FullName ?? "",
-                    Content = c.LastMessage.Content,
-                    SentAt = c.LastMessage.SentAt,
-                    IsRead = c.LastMessage.Status == MessageStatus.Read,
-                    ReplyToMessageId = c.LastMessage.ReplyToMessageId,
-                    ReplyMessage = c.LastMessage.ReplyToMessage != null ? new ReplyMessageDto
-                    {
-                        Id = c.LastMessage.ReplyToMessage.Id,
-                        SenderId = c.LastMessage.ReplyToMessage.SenderId,
-                        SenderName = c.LastMessage.ReplyToMessage.Sender?.FullName ?? c.LastMessage.ReplyToMessage.Sender?.UserName ?? string.Empty,
-                        Content = c.LastMessage.ReplyToMessage.Content
-                    } : null
-                } : null,
+                LastMessage = c.LastMessage != null ? MapToMessageDto(c.LastMessage) : null,
                 LastMessageTime = c.LastMessage?.SentAt ?? c.CreatedAt,
                 UnreadCount = myParticipant?.UnreadCount ?? 0,
                 IsGroup = c.Type == ConversationType.Group,
@@ -337,37 +240,7 @@ public class ChatService : IChatService
         _unitOfWork.Messages.Update(message);
         await _unitOfWork.SaveChangesAsync();
 
-        var dto = new MessageDto
-        {
-            Id = message.Id,
-            ConversationId = message.ConversationId,
-            SenderId = message.SenderId,
-            SenderName = message.Sender?.FullName ?? message.Sender?.UserName ?? "Unknown",
-            Content = message.Content,
-            Type = message.Type.ToString(),
-            SentAt = message.SentAt,
-            EditedAt = message.EditedAt,
-            IsRead = message.Status == MessageStatus.Read,
-            ReplyToMessageId = message.ReplyToMessageId,
-            ReplyMessage = message.ReplyToMessage != null ? new ReplyMessageDto
-            {
-                Id = message.ReplyToMessage.Id,
-                SenderId = message.ReplyToMessage.SenderId,
-                SenderName = message.ReplyToMessage.Sender?.FullName ?? message.ReplyToMessage.Sender?.UserName ?? string.Empty,
-                Content = message.ReplyToMessage.Content
-            } : null,
-            Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
-            {
-                FileName = a.FileName,
-                FileUrl = a.FileUrl,
-                Type = a.Type.ToString()
-            }).ToList(),
-            Reactions = message.Reactions?.Select(r => new MessageReactionDto
-            {
-                UserId = r.UserId,
-                Emoji = r.Emoji
-            }).ToList() ?? new List<MessageReactionDto>()
-        };
+        var dto = MapToMessageDto(message);
 
         return Result<MessageDto>.Success(dto);
     }
@@ -380,18 +253,7 @@ public class ChatService : IChatService
 
         var messages = await _unitOfWork.Messages.SearchMessagesAsync(conversationId, query);
 
-        var dtos = messages.Select(m => new MessageDto
-        {
-            Id = m.Id,
-            ConversationId = m.ConversationId,
-            SenderId = m.SenderId,
-            SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? "Unknown",
-            Content = m.Content,
-            Type = m.Type.ToString(),
-            SentAt = m.SentAt,
-            EditedAt = m.EditedAt,
-            IsRead = m.Status == MessageStatus.Read,
-        });
+        var dtos = messages.Select(m => MapToMessageDto(m));
 
         return Result<IEnumerable<MessageDto>>.Success(dtos);
     }
@@ -438,40 +300,54 @@ public class ChatService : IChatService
         try
         {
             var messages = await _unitOfWork.Messages.GetMessagesSinceAsync(conversationId, since);
-            var dtos = messages.Select(m => new MessageDto
-            {
-                Id = m.Id,
-                ConversationId = m.ConversationId,
-                SenderId = m.SenderId,
-                SenderName = m.Sender?.FullName ?? m.Sender?.UserName ?? string.Empty,
-                Content = m.Content,
-                Type = m.Type.ToString(),
-                SentAt = m.SentAt,
-                IsRead = m.Status == Domain.Enums.MessageStatus.Read,
-                ReplyToMessageId = m.ReplyToMessageId,
-                EditedAt = m.EditedAt,
-                Attachments = m.Attachments?.Select(a => new MessageAttachmentDto
-                {
-                    FileName = a.FileName,
-                    FileUrl = a.FileUrl,
-                    Type = a.Type.ToString(),
-                    FileSize = a.FileSize,
-                    FileSizeFormatted = a.GetFileSizeFormatted(),
-                    DurationFormatted = a.GetDurationFormatted(),
-                    Width = a.Width,
-                    Height = a.Height
-                }).ToList(),
-                Reactions = m.Reactions?.Select(r => new MessageReactionDto
-                {
-                    UserId = r.UserId,
-                    Emoji = r.Emoji
-                }).ToList()
-            });
+            var dtos = messages.Select(m => MapToMessageDto(m));
             return Result<IEnumerable<MessageDto>>.Success(dtos);
         }
         catch (Exception ex)
         {
             return Result<IEnumerable<MessageDto>>.Failure(new Error("Chat.GetSinceFailed", ex.Message));
         }
+    }
+
+    // --- HELPER METHODS ---
+    private static MessageDto MapToMessageDto(Message message, string? clientMessageId = null)
+    {
+        return new MessageDto
+        {
+            Id = message.Id,
+            ConversationId = message.ConversationId,
+            SenderId = message.SenderId,
+            SenderName = message.Sender?.FullName ?? message.Sender?.UserName ?? "Unknown",
+            Content = message.Content,
+            Type = message.Type.ToString(),
+            SentAt = message.SentAt,
+            EditedAt = message.EditedAt,
+            IsRead = message.Status == MessageStatus.Read,
+            ReplyToMessageId = message.ReplyToMessageId,
+            ReplyMessage = message.ReplyToMessage != null ? new ReplyMessageDto
+            {
+                Id = message.ReplyToMessage.Id,
+                SenderId = message.ReplyToMessage.SenderId,
+                SenderName = message.ReplyToMessage.Sender?.FullName ?? message.ReplyToMessage.Sender?.UserName ?? string.Empty,
+                Content = message.ReplyToMessage.Content
+            } : null,
+            Attachments = message.Attachments?.Select(a => new MessageAttachmentDto
+            {
+                FileName = a.FileName,
+                FileUrl = a.FileUrl,
+                Type = a.Type.ToString(),
+                FileSize = a.FileSize,
+                FileSizeFormatted = a.GetFileSizeFormatted(),
+                DurationFormatted = a.GetDurationFormatted(),
+                Width = a.Width,
+                Height = a.Height
+            }).ToList() ?? new List<MessageAttachmentDto>(),
+            Reactions = message.Reactions?.Select(r => new MessageReactionDto
+            {
+                UserId = r.UserId,
+                Emoji = r.Emoji
+            }).ToList() ?? new List<MessageReactionDto>(),
+            ClientMessageId = clientMessageId
+        };
     }
 }
