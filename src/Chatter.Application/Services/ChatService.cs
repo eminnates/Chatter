@@ -42,6 +42,7 @@ public class ChatService : IChatService
             var senderName = sender.FullName ?? sender.UserName ?? string.Empty;
 
             Conversation? conversation = null;
+            var conversationJustCreated = false;
 
             // 1. Konuşmayı Bul veya Oluştur
             if (request.ConversationId.HasValue)
@@ -56,8 +57,9 @@ public class ChatService : IChatService
                 if (conversation == null)
                 {
                     conversation = new Conversation(type: ConversationType.OneToOne) { Id = Guid.NewGuid() };
+                    conversationJustCreated = true;
                     await _unitOfWork.Conversations.AddAsync(conversation);
-                    
+
                     conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member));
                     conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: receiverGuid, role: ParticipantRole.Member));
                 }
@@ -118,9 +120,15 @@ public class ChatService : IChatService
             }
 
             await _unitOfWork.Messages.AddAsync(message);
-            
+
             // 4. Konuşma Bilgilerini Güncelle
-            conversation.UpdateLastMessage(message);
+            // If the conversation was just created in this transaction, updating LastMessage here
+            // would create a circular dependency (Conversation -> Message -> Conversation).
+            // Delay setting LastMessage for newly created conversations until after the first SaveChanges.
+            if (!conversationJustCreated)
+            {
+                conversation.UpdateLastMessage(message);
+            }
             
             if (conversation.Participants != null)
             {
@@ -130,8 +138,15 @@ public class ChatService : IChatService
                 }
             }
 
-            // TEK SAVECHANGES
+            // TEK SAVECHANGES (first pass)
             await _unitOfWork.SaveChangesAsync();
+
+            // If we created the conversation in this request, set LastMessage now and save again.
+            if (conversationJustCreated)
+            {
+                conversation.UpdateLastMessage(message);
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             // 5. DTO DÖNDÜR
             var messageDto = MapToMessageDto(message, request.ClientMessageId);
@@ -218,14 +233,14 @@ public class ChatService : IChatService
         if (existing != null) 
             return Result<Guid>.Success(existing.Id);
 
-        var conversation = new Conversation(type: ConversationType.OneToOne);
-        
+        var conversation = new Conversation(type: ConversationType.OneToOne) { Id = Guid.NewGuid() };
+
         conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: senderId, role: ParticipantRole.Member));
         conversation.AddParticipant(new ConversationParticipant(conversationId: conversation.Id, userId: receiverId, role: ParticipantRole.Member));
 
         await _unitOfWork.Conversations.AddAsync(conversation);
         await _unitOfWork.SaveChangesAsync();
-        
+
         return Result<Guid>.Success(conversation.Id);
     }
 
